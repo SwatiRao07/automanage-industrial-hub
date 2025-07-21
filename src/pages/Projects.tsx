@@ -8,12 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table as TableComponent, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import Sidebar from "@/components/Sidebar";
 
 const Projects = () => {
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [searchQuery, setSearchQuery] = useState("");
   const [clientFilter, setClientFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Mock project data
   const projects = [
@@ -154,170 +156,173 @@ const Projects = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-card border-b">
-        <div className="container mx-auto px-6 py-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold">📘 Projects</h1>
-              <span className="text-muted-foreground">({filteredProjects.length} projects)</span>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add New Project
-              </Button>
-              <Button variant="outline" onClick={() => {}}>
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
-            </div>
-          </div>
-
-          {/* Controls */}
-          <div className="flex flex-col gap-4 mt-6 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3 flex-1 max-w-md">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search projects..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
+    <div className="flex min-h-screen bg-background">
+      <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} />
+      <div className={`flex-1 transition-all duration-300 ease-in-out ${sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
+        {/* Header */}
+        <div className="bg-card border-b">
+          <div className="container mx-auto px-6 py-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-bold">📘 Projects</h1>
+                <span className="text-muted-foreground">({filteredProjects.length} projects)</span>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add New Project
+                </Button>
+                <Button variant="outline" onClick={() => {}}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </Button>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <Select value={clientFilter} onValueChange={setClientFilter}>
-                <SelectTrigger className="w-40">
-                  <Filter className="h-4 w-4 mr-2" />
-                  <SelectValue placeholder="Filter by Client" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Clients</SelectItem>
-                  {uniqueClients.map(client => (
-                    <SelectItem key={client} value={client}>{client}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Controls */}
+            <div className="flex flex-col gap-4 mt-6 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-3 flex-1 max-w-md">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search projects..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
 
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-36">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="ongoing">Ongoing</SelectItem>
-                  <SelectItem value="delayed">Delayed</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-3">
+                <Select value={clientFilter} onValueChange={setClientFilter}>
+                  <SelectTrigger className="w-40">
+                    <Filter className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="Filter by Client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Clients</SelectItem>
+                    {uniqueClients.map(client => (
+                      <SelectItem key={client} value={client}>{client}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              <Separator orientation="vertical" className="h-6" />
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-36">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="ongoing">Ongoing</SelectItem>
+                    <SelectItem value="delayed">Delayed</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
 
-              <div className="flex rounded-lg border">
-                <Button
-                  variant={viewMode === "cards" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setViewMode("cards")}
-                  className="rounded-r-none"
-                >
-                  <Grid className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={viewMode === "table" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setViewMode("table")}
-                  className="rounded-l-none"
-                >
-                  <Table className="h-4 w-4" />
-                </Button>
+                <Separator orientation="vertical" className="h-6" />
+
+                <div className="flex rounded-lg border">
+                  <Button
+                    variant={viewMode === "cards" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setViewMode("cards")}
+                    className="rounded-r-none"
+                  >
+                    <Grid className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={viewMode === "table" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setViewMode("table")}
+                    className="rounded-l-none"
+                  >
+                    <Table className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="container mx-auto px-6 py-8">
-        {viewMode === "cards" ? (
-          /* Card View */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProjects.map((project) => (
-              <ProjectCard key={project.id} project={project} />
-            ))}
-          </div>
-        ) : (
-          /* Table View */
-          <Card>
-            <TableComponent>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Project Name</TableHead>
-                  <TableHead>Project ID</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Deadline</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Progress</TableHead>
-                  <TableHead className="text-center">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProjects.map((project) => (
-                  <TableRow key={project.id} className="hover:bg-muted/50">
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{project.name}</div>
-                        <div className="text-sm text-muted-foreground">{project.description}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono">{project.id}</TableCell>
-                    <TableCell>{project.client}</TableCell>
-                    <TableCell>{formatDate(project.deadline)}</TableCell>
-                    <TableCell>{getStatusBadge(project.status)}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 bg-secondary rounded-full h-2">
-                          <div 
-                            className="bg-primary h-2 rounded-full" 
-                            style={{ width: `${project.progress}%` }}
-                          />
-                        </div>
-                        <span className="text-sm font-medium">{project.progress}%</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1 justify-center">
-                        <Button asChild variant="outline" size="sm">
-                          <Link to={`/bom?project=${project.id}`}>🔧</Link>
-                        </Button>
-                        <Button asChild variant="outline" size="sm">
-                          <Link to={`/time-tracking?project=${project.id}`}>⏱️</Link>
-                        </Button>
-                        <Button asChild variant="outline" size="sm">
-                          <Link to={`/cost-analysis?project=${project.id}`}>💰</Link>
-                        </Button>
-                      </div>
-                    </TableCell>
+        {/* Content */}
+        <div className="container mx-auto px-6 py-8">
+          {viewMode === "cards" ? (
+            /* Card View */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filteredProjects.map((project) => (
+                <ProjectCard key={project.id} project={project} />
+              ))}
+            </div>
+          ) : (
+            /* Table View */
+            <Card>
+              <TableComponent>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Project Name</TableHead>
+                    <TableHead>Project ID</TableHead>
+                    <TableHead>Client</TableHead>
+                    <TableHead>Deadline</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Progress</TableHead>
+                    <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </TableComponent>
-          </Card>
-        )}
+                </TableHeader>
+                <TableBody>
+                  {filteredProjects.map((project) => (
+                    <TableRow key={project.id} className="hover:bg-muted/50">
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{project.name}</div>
+                          <div className="text-sm text-muted-foreground">{project.description}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono">{project.id}</TableCell>
+                      <TableCell>{project.client}</TableCell>
+                      <TableCell>{formatDate(project.deadline)}</TableCell>
+                      <TableCell>{getStatusBadge(project.status)}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 bg-secondary rounded-full h-2">
+                            <div 
+                              className="bg-primary h-2 rounded-full" 
+                              style={{ width: `${project.progress}%` }}
+                            />
+                          </div>
+                          <span className="text-sm font-medium">{project.progress}%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1 justify-center">
+                          <Button asChild variant="outline" size="sm">
+                            <Link to={`/bom?project=${project.id}`}>🔧</Link>
+                          </Button>
+                          <Button asChild variant="outline" size="sm">
+                            <Link to={`/time-tracking?project=${project.id}`}>⏱️</Link>
+                          </Button>
+                          <Button asChild variant="outline" size="sm">
+                            <Link to={`/cost-analysis?project=${project.id}`}>💰</Link>
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </TableComponent>
+            </Card>
+          )}
 
-        {filteredProjects.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-muted-foreground text-lg">No projects found matching your criteria.</div>
-            <Button className="mt-4">
-              <Plus className="h-4 w-4 mr-2" />
-              Create New Project
-            </Button>
-          </div>
-        )}
+          {filteredProjects.length === 0 && (
+            <div className="text-center py-12">
+              <div className="text-muted-foreground text-lg">No projects found matching your criteria.</div>
+              <Button className="mt-4">
+                <Plus className="h-4 w-4 mr-2" />
+                Create New Project
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
