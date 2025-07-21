@@ -187,11 +187,11 @@ const BOM = () => {
   // Filtered categories based on search and filter selections
   const filteredCategories = categories
     .map(category => ({
-      ...category,
+    ...category,
       items: category.items.filter(item => {
         const matchesSearch =
-          item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.partId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.partId.toLowerCase().includes(searchTerm.toLowerCase()) ||
           item.description.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus =
           selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
@@ -323,40 +323,40 @@ const BOM = () => {
       />
       <div className="flex-1 flex flex-col">
          <main className="flex-1 p-6">
-          <div className="max-w-7xl mx-auto">
-            {/* BOM Header */}
-            <BOMHeader />
+      <div className="max-w-7xl mx-auto">
+        {/* BOM Header */}
+        <BOMHeader />
 
-            {/* Search and Actions Bar */}
-            <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              <div className="relative flex-1 flex items-center gap-2">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                  <Input
-                    type="text"
-                    placeholder="Search parts by name, ID, or description..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setAddPartOpen(true)}>
-                  <Plus size={16} className="mr-2" />
-                  Add Part
-                </Button>
-              </div>
-              
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setFilterOpen(true)}>
-                  <Filter size={16} className="mr-2" />
-                  Filter
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleExportCSV}>
-                  <Download size={16} className="mr-2" />
-                  Export
-                </Button>
-              </div>
+        {/* Search and Actions Bar */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+          <div className="relative flex-1 flex items-center gap-2">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <Input
+                type="text"
+                placeholder="Search parts by name, ID, or description..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
             </div>
+                <Button variant="outline" size="sm" onClick={() => setAddPartOpen(true)}>
+              <Plus size={16} className="mr-2" />
+              Add Part
+            </Button>
+          </div>
+          
+          <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => setFilterOpen(true)}>
+              <Filter size={16} className="mr-2" />
+              Filter
+            </Button>
+                <Button variant="outline" size="sm" onClick={handleExportCSV}>
+              <Download size={16} className="mr-2" />
+              Export
+            </Button>
+          </div>
+        </div>
 
             {filterOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
@@ -408,174 +408,168 @@ const BOM = () => {
               </div>
             )}
 
-            {/* Add Part Dialog */}
-            {addPartOpen && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
-                <div className="bg-white rounded shadow-lg p-6 min-w-[350px] text-center">
-                  <div className="mb-4 text-lg font-semibold">Add Part</div>
+        {/* Add Part Dialog */}
+        {addPartOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+            <div className="bg-white rounded shadow-lg p-6 min-w-[350px] text-center">
+              <div className="mb-4 text-lg font-semibold">Add Part</div>
                   {addPartError && (
                     <div className="mb-2 text-red-600 text-sm font-medium">{addPartError}</div>
                   )}
-                  <select className="w-full border rounded p-2 mb-2" value={addingNewCategory ? '+new' : (categoryForPart ?? '')} onChange={e => {
-                    if (e.target.value === '+new') {
-                      setAddingNewCategory(true);
-                      setCategoryForPart(null);
-                    } else {
-                      setAddingNewCategory(false);
-                      setCategoryForPart(e.target.value);
-                    }
-                  }}>
-                    <option value="">Select Category</option>
-                    {categories.map(cat => (
-                      <option key={cat.name} value={cat.name}>{cat.name}</option>
+              <select className="w-full border rounded p-2 mb-2" value={addingNewCategory ? '+new' : (categoryForPart ?? '')} onChange={e => {
+                if (e.target.value === '+new') {
+                  setAddingNewCategory(true);
+                  setCategoryForPart(null);
+                } else {
+                  setAddingNewCategory(false);
+                  setCategoryForPart(e.target.value);
+                }
+              }}>
+                <option value="">Select Category</option>
+                {categories.map(cat => (
+                  <option key={cat.name} value={cat.name}>{cat.name}</option>
+                ))}
+                <option value="+new">+ Add New Category</option>
+              </select>
+              {addingNewCategory && (
+                <input
+                  className="w-full border rounded p-2 mb-2"
+                  value={newCategoryName}
+                  onChange={e => setNewCategoryName(e.target.value)}
+                  placeholder="Enter new category name"
+                />
+              )}
+              {(categoryForPart || (addingNewCategory && newCategoryName.trim())) && (
+                <div className="mb-2 text-left">
+                  <div className="font-semibold text-sm mb-1">Parts in {addingNewCategory ? newCategoryName || '...' : categoryForPart}:</div>
+                  <ul className="border rounded p-2 bg-gray-50 max-h-32 overflow-y-auto text-xs">
+                    {(categories.find(cat => cat.name === (addingNewCategory ? newCategoryName : categoryForPart))?.items || []).map(part => (
+                      <li key={part.id}>{part.name} ({part.partId})</li>
                     ))}
-                    <option value="+new">+ Add New Category</option>
-                  </select>
-                  {addingNewCategory && (
+                    {((categories.find(cat => cat.name === (addingNewCategory ? newCategoryName : categoryForPart))?.items.length || 0) === 0) && (
+                      <li className="text-gray-400">No parts yet.</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+              <input className="w-full border rounded p-2 mb-2" value={newPart.name} onChange={e => setNewPart({ ...newPart, name: e.target.value, descriptionKV: newPart.descriptionKV })} placeholder="Part name" />
+              <input className="w-full border rounded p-2 mb-2" value={newPart.partId} onChange={e => setNewPart({ ...newPart, partId: e.target.value, descriptionKV: newPart.descriptionKV })} placeholder="Part ID" />
+              {/* Description Key-Value Inputs */}
+              <div className="mb-2">
+                <div className="font-semibold text-sm mb-1 text-left">Description</div>
+                {newPart.descriptionKV.map((kv, idx) => (
+                  <div key={idx} className="flex gap-2 mb-1">
                     <input
-                      className="w-full border rounded p-2 mb-2"
-                      value={newCategoryName}
-                      onChange={e => setNewCategoryName(e.target.value)}
-                      placeholder="Enter new category name"
+                      className="border rounded p-2 w-1/2 font-normal"
+                      placeholder="Key"
+                      value={kv.key}
+                      onChange={e => setNewPart({
+                        ...newPart,
+                        descriptionKV: newPart.descriptionKV.map((item, i) => i === idx ? { ...item, key: e.target.value } : item)
+                      })}
                     />
-                  )}
-                  {(categoryForPart || (addingNewCategory && newCategoryName.trim())) && (
-                    <div className="mb-2 text-left">
-                      <div className="font-semibold text-sm mb-1">Parts in {addingNewCategory ? newCategoryName || '...' : categoryForPart}:</div>
-                      <ul className="border rounded p-2 bg-gray-50 max-h-32 overflow-y-auto text-xs">
-                        {(categories.find(cat => cat.name === (addingNewCategory ? newCategoryName : categoryForPart))?.items || []).map(part => (
-                          <li key={part.id}>{part.name} ({part.partId})</li>
-                        ))}
-                        {((categories.find(cat => cat.name === (addingNewCategory ? newCategoryName : categoryForPart))?.items.length || 0) === 0) && (
-                          <li className="text-gray-400">No parts yet.</li>
-                        )}
-                      </ul>
-                    </div>
-                  )}
-                  <input className="w-full border rounded p-2 mb-2" value={newPart.name} onChange={e => setNewPart({ ...newPart, name: e.target.value, descriptionKV: newPart.descriptionKV })} placeholder="Part name" />
-                  <input className="w-full border rounded p-2 mb-2" value={newPart.partId} onChange={e => setNewPart({ ...newPart, partId: e.target.value, descriptionKV: newPart.descriptionKV })} placeholder="Part ID" />
-                  {/* Description Key-Value Inputs */}
-                  <div className="mb-2">
-                    <div className="font-semibold text-sm mb-1 text-left">Description</div>
-                    {newPart.descriptionKV.map((kv, idx) => (
-                      <div key={idx} className="flex gap-2 mb-1">
-                        <input
-                          className="border rounded p-2 w-1/2 font-normal"
-                          placeholder="Key"
-                          value={kv.key}
-                          onChange={e => setNewPart({
-                            ...newPart,
-                            descriptionKV: newPart.descriptionKV.map((item, i) => i === idx ? { ...item, key: e.target.value } : item)
-                          })}
-                        />
-                        <input
-                          className="border rounded p-2 w-1/2 font-normal"
-                          placeholder="Value"
-                          value={kv.value}
-                          onChange={e => setNewPart({
-                            ...newPart,
-                            descriptionKV: newPart.descriptionKV.map((item, i) => i === idx ? { ...item, value: e.target.value } : item)
-                          })}
-                        />
-                        <button
-                          className="text-red-500 px-2"
-                          onClick={e => {
-                            e.preventDefault();
-                            setNewPart({
-                              ...newPart,
-                              descriptionKV: newPart.descriptionKV.length > 1 ? newPart.descriptionKV.filter((_, i) => i !== idx) : newPart.descriptionKV
-                            });
-                          }}
-                          disabled={newPart.descriptionKV.length === 1}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
+                    <input
+                      className="border rounded p-2 w-1/2 font-normal"
+                      placeholder="Value"
+                      value={kv.value}
+                      onChange={e => setNewPart({
+                        ...newPart,
+                        descriptionKV: newPart.descriptionKV.map((item, i) => i === idx ? { ...item, value: e.target.value } : item)
+                      })}
+                    />
                     <button
-                      className="text-blue-600 text-xs mt-1"
+                      className="text-red-500 px-2"
                       onClick={e => {
                         e.preventDefault();
                         setNewPart({
                           ...newPart,
-                          descriptionKV: [...newPart.descriptionKV, { value: '', key: '' }]
+                          descriptionKV: newPart.descriptionKV.length > 1 ? newPart.descriptionKV.filter((_, i) => i !== idx) : newPart.descriptionKV
                         });
                       }}
+                      disabled={newPart.descriptionKV.length === 1}
                     >
-                      + Add Row
+                      ×
                     </button>
                   </div>
-                  <div className="font-semibold text-sm mb-1 text-left">Quantity</div>
-                  <input className="w-full border rounded p-2 mb-4" type="number" min={1} value={newPart.quantity} onChange={e => setNewPart({ ...newPart, quantity: Number(e.target.value), descriptionKV: newPart.descriptionKV })} placeholder="Quantity" />
-                  <div className="flex justify-center gap-2">
-                    <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={handleAddPart} disabled={!categoryForPart && !addingNewCategory && !newPart.name.trim() && !newPart.partId.trim()}>Add</button>
-                    <button className="px-4 py-2 bg-gray-200 text-gray-700 rounded" onClick={() => setAddPartOpen(false)}>Cancel</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* BOM Categories List */}
-              <div className="lg:col-span-2 space-y-4">
-                {filteredCategories.map((category) => (
-                  <BOMCategoryCard
-                    key={category.name}
-                    category={category}
-                    onToggle={() => toggleCategory(category.name)}
-                    onPartClick={handlePartClick}
-                    onQuantityChange={handleQuantityChange}
-                    onDeletePart={partId => {
-                      setCategories(prev => prev.map(cat =>
-                        cat.name === category.name
-                          ? { ...cat, items: cat.items.filter(item => item.id !== partId) }
-                          : cat
-                      ));
-                      if (selectedPart && selectedPart.id === partId) setSelectedPart(null);
-                    }}
-                    onEditCategory={handleEditCategory}
-                    onStatusChange={(partId, newStatus) => {
-                      setCategories(prev => prev.map(cat => ({
-                        ...cat,
-                        items: cat.items.map(item => item.id === partId ? { ...item, status: newStatus } : item)
-                      })));
-                    }}
-                  />
                 ))}
-                
-                {filteredCategories.length === 0 && (
-                  <Card>
-                    <CardContent className="p-8 text-center">
-                      <p className="text-gray-500">No parts found matching your search criteria.</p>
-                    </CardContent>
-                  </Card>
-                )}
+                <button
+                  className="text-blue-600 text-xs mt-1"
+                  onClick={e => {
+                    e.preventDefault();
+                    setNewPart({
+                      ...newPart,
+                      descriptionKV: [...newPart.descriptionKV, { value: '', key: '' }]
+                    });
+                  }}
+                >
+                  + Add Row
+                </button>
               </div>
-
-              {/* Part Details Side Panel */}
-              <div className="lg:col-span-1">
-                <BOMPartDetails
-                  part={selectedPart}
-                  onClose={() => setSelectedPart(null)}
-                  onUpdatePart={(updatedPart) => {
-                    setCategories(prev => prev.map(cat => ({
-                      ...cat,
-                      items: cat.items.map(item =>
-                        item.id === updatedPart.id ? { ...item, ...updatedPart } : item
-                      )
-                    })));
-                    setSelectedPart(updatedPart);
-                  }}
-                  onDeletePart={(id) => {
-                    setCategories(prev => prev.map(cat => ({
-                      ...cat,
-                      items: cat.items.filter(item => item.id !== id)
-                    })));
-                    setSelectedPart(null);
-                  }}
-                />
+                  <div className="font-semibold text-sm mb-1 text-left">Quantity</div>
+              <input className="w-full border rounded p-2 mb-4" type="number" min={1} value={newPart.quantity} onChange={e => setNewPart({ ...newPart, quantity: Number(e.target.value), descriptionKV: newPart.descriptionKV })} placeholder="Quantity" />
+              <div className="flex justify-center gap-2">
+                <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={handleAddPart} disabled={!categoryForPart && !addingNewCategory && !newPart.name.trim() && !newPart.partId.trim()}>Add</button>
+                <button className="px-4 py-2 bg-gray-200 text-gray-700 rounded" onClick={() => setAddPartOpen(false)}>Cancel</button>
               </div>
             </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* BOM Categories List */}
+          <div className="lg:col-span-2 space-y-4">
+            {filteredCategories.map((category) => (
+              <BOMCategoryCard
+                key={category.name}
+                category={category}
+                onToggle={() => toggleCategory(category.name)}
+                onPartClick={handlePartClick}
+                onQuantityChange={handleQuantityChange}
+                onDeletePart={partId => {
+                  setCategories(prev => prev.map(cat =>
+                    cat.name === category.name
+                      ? { ...cat, items: cat.items.filter(item => item.id !== partId) }
+                      : cat
+                  ));
+                  if (selectedPart && selectedPart.id === partId) setSelectedPart(null);
+                }}
+                onEditCategory={handleEditCategory}
+              />
+            ))}
+            
+            {filteredCategories.length === 0 && (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <p className="text-gray-500">No parts found matching your search criteria.</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Part Details Side Panel */}
+          <div className="lg:col-span-1">
+            <BOMPartDetails
+              part={selectedPart}
+              onClose={() => setSelectedPart(null)}
+              onUpdatePart={(updatedPart) => {
+                setCategories(prev => prev.map(cat => ({
+                  ...cat,
+                  items: cat.items.map(item =>
+                    item.id === updatedPart.id ? { ...item, ...updatedPart } : item
+                  )
+                })));
+                setSelectedPart(updatedPart);
+              }}
+              onDeletePart={(id) => {
+                setCategories(prev => prev.map(cat => ({
+                  ...cat,
+                  items: cat.items.filter(item => item.id !== id)
+                })));
+                setSelectedPart(null);
+              }}
+            />
+          </div>
+        </div>
           </div>
         </main>
       </div>

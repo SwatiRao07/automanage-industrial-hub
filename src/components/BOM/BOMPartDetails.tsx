@@ -126,8 +126,7 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
   const [docDeleteMode, setDocDeleteMode] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
   // Combine part-level and all vendor documents for the Documents section
-  const vendorDocs = vendors.flatMap(v => v.documents || []);
-  const documents = Array.from(new Set([...(partState?.documents || []), ...vendorDocs]));
+  const documents = partState?.documents || [];
   const setDocuments = (docs: string[]) => {
     setPartState(prev => prev ? { ...prev, documents: docs } : prev);
     if (typeof onUpdatePart === 'function' && partState) {
@@ -391,6 +390,12 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
               <div className="flex w-full items-center justify-between font-medium text-gray-900 px-0 py-2 bg-transparent border-none cursor-pointer">
                 <span>Documents</span>
                 <div className="flex items-center gap-2">
+                  <label className="cursor-pointer">
+                    <input type="file" multiple className="hidden" onChange={handleUploadDocs} />
+                    <span className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium" title="Add file">
+                      Add file
+                    </span>
+                  </label>
                   <button
                     className={`p-1 rounded-full ${docDeleteMode ? 'bg-red-100 text-red-600' : ''}`}
                     style={{ minWidth: 32, minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
