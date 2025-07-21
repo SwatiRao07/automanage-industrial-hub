@@ -67,7 +67,7 @@ const Projects = () => {
       case "delayed":
         return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">🔴 Delayed</Badge>;
       case "completed":
-        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">✅ Complete</Badge>;
+        return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">✅ Completed</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
@@ -124,7 +124,7 @@ const Projects = () => {
       <Button
         variant="ghost"
         size="sm"
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity !bg-transparent hover:!bg-transparent focus:!bg-transparent"
         onClick={() => handleDeleteClick(project)}
       >
         <X className="h-3 w-3 text-red-500" strokeWidth={1.5}/>

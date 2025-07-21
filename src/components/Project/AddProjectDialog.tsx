@@ -89,7 +89,7 @@ const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialog
               <SelectContent>
                 <SelectItem value="ongoing">🟢 Ongoing</SelectItem>
                 <SelectItem value="delayed">🔴 Delayed</SelectItem>
-                <SelectItem value="completed">✅ Complete</SelectItem>
+                <SelectItem value="completed">✅ Completed</SelectItem>
               </SelectContent>
             </Select>
           </div>
