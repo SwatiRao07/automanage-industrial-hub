@@ -22,7 +22,7 @@ interface BOMItem {
     leadTime: string;
     availability: string;
   }>;
-  status: 'not-ordered' | 'ordered' | 'received';
+  status: 'not-ordered' | 'ordered' | 'received' | 'approved';
   expectedDelivery?: string;
   poNumber?: string;
   descriptionKV?: Array<{ key: string; value: string }>;
@@ -50,6 +50,7 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'approved': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'received': return 'bg-green-100 text-green-800 border-green-200';
       case 'ordered': return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'not-ordered': return 'bg-red-100 text-red-800 border-red-200';

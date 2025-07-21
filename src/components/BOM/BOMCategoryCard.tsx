@@ -19,7 +19,7 @@ interface BOMItem {
     leadTime: string;
     availability: string;
   }>;
-  status: 'not-ordered' | 'ordered' | 'received';
+  status: 'not-ordered' | 'ordered' | 'received' | 'approved';
   expectedDelivery?: string;
   poNumber?: string;
 }

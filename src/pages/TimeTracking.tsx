@@ -19,7 +19,7 @@ const TimeTracking = () => {
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
-      <div className="flex-1 flex flex-col">
+      <div className={`flex-1 flex flex-col ${sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
         <main className="flex-1 p-6">
           <div className="max-w-7xl mx-auto">
             <div className="border-b bg-card mb-6">

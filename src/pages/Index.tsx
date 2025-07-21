@@ -63,7 +63,7 @@ const Index = () => {
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} 
       />
       
-      <div className="flex-1 flex flex-col">
+      <div className={`flex-1 flex flex-col ${sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
         <DashboardHeader />
         
         <main className="flex-1 p-6">

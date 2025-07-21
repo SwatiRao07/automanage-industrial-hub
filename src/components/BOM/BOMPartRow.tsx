@@ -33,7 +33,7 @@ interface BOMItem {
     leadTime: string;
     availability: string;
   }>;
-  status: 'not-ordered' | 'ordered' | 'received';
+  status: 'not-ordered' | 'ordered' | 'received' | 'approved';
   expectedDelivery?: string;
   poNumber?: string;
   finalizedVendor?: { name: string; price: number; leadTime: string; availability: string };
@@ -100,12 +100,12 @@ const BOMPartRow = ({ part, onClick, onQuantityChange, allVendors = [], onDelete
     switch (status) {
       case 'approved':
         return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Approved</Badge>;
-      case 'received':
-        return <Badge className="bg-green-100 text-green-800 border-green-200">Received</Badge>;
       case 'ordered':
         return <Badge className="bg-amber-100 text-amber-800 border-amber-200">Ordered</Badge>;
       case 'not-ordered':
         return <Badge className="bg-red-100 text-red-800 border-red-200">Not Ordered</Badge>;
+      case 'received':
+        return <Badge className="bg-green-100 text-green-800 border-green-200">Received</Badge>;
       default:
         return <Badge variant="outline">Unknown</Badge>;
     }

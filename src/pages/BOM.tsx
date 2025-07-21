@@ -24,7 +24,7 @@ interface BOMItem {
     leadTime: string;
     availability: string;
   }>;
-  status: 'not-ordered' | 'ordered' | 'received';
+  status: 'not-ordered' | 'ordered' | 'received' | 'approved';
   expectedDelivery?: string;
   poNumber?: string;
   finalizedVendor?: { name: string; price: number; leadTime: string; availability: string };
@@ -321,7 +321,7 @@ const BOM = () => {
         collapsed={sidebarCollapsed} 
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} 
       />
-      <div className="flex-1 flex flex-col">
+      <div className={`flex-1 flex flex-col ${sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
          <main className="flex-1 p-6">
       <div className="max-w-7xl mx-auto">
         {/* BOM Header */}
@@ -364,7 +364,7 @@ const BOM = () => {
                   <div className="mb-4 text-lg font-semibold text-center">Filter Parts</div>
                   <div className="mb-4">
                     <div className="font-semibold text-sm mb-2">Status</div>
-                    {['ordered', 'received', 'not-ordered'].map(status => (
+                    {['ordered', 'received', 'not-ordered', 'approved'].map(status => (
                       <label key={status} className="flex items-center gap-2 mb-1">
                         <input
                           type="checkbox"
@@ -534,6 +534,24 @@ const BOM = () => {
                   if (selectedPart && selectedPart.id === partId) setSelectedPart(null);
                 }}
                 onEditCategory={handleEditCategory}
+                onStatusChange={(partId, newStatus) => {
+                  setCategories(prev => {
+                    const updated = prev.map(cat => ({
+                      ...cat,
+                      items: cat.items.map(item =>
+                        item.id === partId ? { ...item, status: newStatus } : item
+                      )
+                    }));
+                    // Find the updated part from the new categories state
+                    const updatedPart = updated
+                      .flatMap(cat => cat.items)
+                      .find(item => item.id === partId);
+                    setSelectedPart(prev =>
+                      prev && prev.id === partId ? updatedPart : prev
+                    );
+                    return updated;
+                  });
+                }}
               />
             ))}
             
