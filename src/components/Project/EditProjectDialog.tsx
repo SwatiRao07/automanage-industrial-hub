@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,42 +15,48 @@ import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 
-interface AddProjectDialogProps {
+interface EditProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onAddProject: (project: any) => void;
+  onUpdateProject: (project: any) => void;
+  project: any | null;
 }
 
-const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialogProps) => {
+const EditProjectDialog = ({ open, onOpenChange, onUpdateProject, project }: EditProjectDialogProps) => {
   const [projectName, setProjectName] = useState("");
   const [projectId, setProjectId] = useState("");
   const [description, setDescription] = useState("");
   const [clientName, setClientName] = useState("");
   const [deadline, setDeadline] = useState<Date | undefined>();
 
+  useEffect(() => {
+    if (project) {
+      setProjectName(project.name);
+      setProjectId(project.id);
+      setDescription(project.description);
+      setClientName(project.client);
+      if (project.deadline) {
+        setDeadline(parseISO(project.deadline));
+      }
+    }
+  }, [project]);
+
   const handleSubmit = () => {
     if (!projectName || !projectId || !clientName || !deadline) {
-      // Basic validation
       alert("Please fill all required fields.");
       return;
     }
-    onAddProject({
+    onUpdateProject({
+      ...project,
       id: projectId,
       name: projectName,
       client: clientName,
       deadline: format(deadline, "yyyy-MM-dd"),
-      status: "ongoing", // Default status
       description,
     });
-    // Reset form
-    setProjectName("");
-    setProjectId("");
-    setDescription("");
-    setClientName("");
-    setDeadline(undefined);
     onOpenChange(false);
   };
 
@@ -58,27 +64,27 @@ const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialog
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Add New Project</DialogTitle>
+          <DialogTitle>Edit Project</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Label htmlFor="projectName">Project Name</Label>
-            <Input id="projectName" value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="Enter Project Name" />
+            <Label htmlFor="editProjectName">Project Name</Label>
+            <Input id="editProjectName" value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="Enter Project Name" />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="projectId">Project ID</Label>
-            <Input id="projectId" value={projectId} onChange={(e) => setProjectId(e.target.value)} placeholder="Enter ID" />
+            <Label htmlFor="editProjectId">Project ID</Label>
+            <Input id="editProjectId" value={projectId} onChange={(e) => setProjectId(e.target.value)} placeholder="Enter ID" disabled />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Enter Description" />
+            <Label htmlFor="editDescription">Description</Label>
+            <Textarea id="editDescription" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Enter Description" />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="clientName">Client Name</Label>
-            <Input id="clientName" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Enter Client Name" />
+            <Label htmlFor="editClientName">Client Name</Label>
+            <Input id="editClientName" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Enter Client Name" />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="deadline">Deadline</Label>
+            <Label htmlFor="editDeadline">Deadline</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -111,7 +117,7 @@ const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialog
             </Button>
           </DialogClose>
           <Button type="submit" onClick={handleSubmit}>
-            Add Project
+            Save Changes
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -119,4 +125,4 @@ const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialog
   );
 };
 
-export default AddProjectDialog; 
+export default EditProjectDialog; 

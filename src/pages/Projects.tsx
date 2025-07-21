@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Plus, Filter, Grid, List, Download, Calendar, User, FileText } from "lucide-react";
+import { Search, Plus, Filter, Grid, List, Download, Calendar, User, FileText, Edit } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Table as TableComponent, TableBody, TableCell, TableHead, TableHeader, 
 import { Separator } from "@/components/ui/separator";
 import Sidebar from "@/components/Sidebar";
 import AddProjectDialog from "@/components/Project/AddProjectDialog";
+import EditProjectDialog from "@/components/Project/EditProjectDialog";
 
 const Projects = () => {
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
@@ -18,6 +19,8 @@ const Projects = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isAddProjectDialogOpen, setIsAddProjectDialogOpen] = useState(false);
+  const [isEditProjectDialogOpen, setIsEditProjectDialogOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<any | null>(null);
 
   // Mock project data
   const [projects, setProjects] = useState([
@@ -72,6 +75,15 @@ const Projects = () => {
     setProjects([newProject, ...projects]);
   };
 
+  const handleUpdateProject = (updatedProject: any) => {
+    setProjects(projects.map(p => p.id === updatedProject.id ? updatedProject : p));
+  };
+
+  const handleEditClick = (project: any) => {
+    setSelectedProject(project);
+    setIsEditProjectDialogOpen(true);
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-GB', {
       day: '2-digit',
@@ -97,7 +109,12 @@ const Projects = () => {
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
           <CardTitle className="text-lg font-semibold">{project.name}</CardTitle>
-          {getStatusBadge(project.status)}
+          <div className="flex items-center gap-2">
+            {getStatusBadge(project.status)}
+            <Button variant="ghost" size="sm" onClick={() => handleEditClick(project)}>
+              <Edit className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         <p className="text-sm text-muted-foreground mt-1">{project.description}</p>
       </CardHeader>
@@ -308,6 +325,12 @@ const Projects = () => {
         open={isAddProjectDialogOpen}
         onOpenChange={setIsAddProjectDialogOpen}
         onAddProject={handleAddProject}
+      />
+      <EditProjectDialog
+        open={isEditProjectDialogOpen}
+        onOpenChange={setIsEditProjectDialogOpen}
+        onUpdateProject={handleUpdateProject}
+        project={selectedProject}
       />
     </div>
   );
