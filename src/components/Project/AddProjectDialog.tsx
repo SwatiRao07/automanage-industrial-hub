@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialog
   const [description, setDescription] = useState("");
   const [clientName, setClientName] = useState("");
   const [deadline, setDeadline] = useState<Date | undefined>();
+  const [status, setStatus] = useState("ongoing");
 
   const handleSubmit = () => {
     if (!projectName || !projectId || !clientName || !deadline) {
@@ -42,7 +44,7 @@ const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialog
       name: projectName,
       client: clientName,
       deadline: format(deadline, "yyyy-MM-dd"),
-      status: "ongoing", // Default status
+      status,
       description,
     });
     // Reset form
@@ -51,6 +53,7 @@ const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialog
     setDescription("");
     setClientName("");
     setDeadline(undefined);
+    setStatus("ongoing");
     onOpenChange(false);
   };
 
@@ -76,6 +79,19 @@ const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialog
           <div className="grid gap-2">
             <Label htmlFor="clientName">Client Name</Label>
             <Input id="clientName" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Enter Client Name" />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="status">Status</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ongoing">🟢 Ongoing</SelectItem>
+                <SelectItem value="delayed">🔴 Delayed</SelectItem>
+                <SelectItem value="completed">✅ Complete</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="deadline">Deadline</Label>

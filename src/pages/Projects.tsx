@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Plus, Filter, Grid, List, Download, Calendar, User, FileText, Edit } from "lucide-react";
+import { Search, Plus, Filter, Grid, List, Download, Calendar, User, FileText, Edit, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import Sidebar from "@/components/Sidebar";
 import AddProjectDialog from "@/components/Project/AddProjectDialog";
 import EditProjectDialog from "@/components/Project/EditProjectDialog";
+import DeleteProjectDialog from "@/components/Project/DeleteProjectDialog";
 
 const Projects = () => {
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
@@ -20,6 +21,7 @@ const Projects = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isAddProjectDialogOpen, setIsAddProjectDialogOpen] = useState(false);
   const [isEditProjectDialogOpen, setIsEditProjectDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<any | null>(null);
 
   // Mock project data
@@ -79,9 +81,22 @@ const Projects = () => {
     setProjects(projects.map(p => p.id === updatedProject.id ? updatedProject : p));
   };
 
+  const handleDeleteProject = () => {
+    if (selectedProject) {
+      setProjects(projects.filter(p => p.id !== selectedProject.id));
+      setIsDeleteDialogOpen(false);
+      setSelectedProject(null);
+    }
+  };
+
   const handleEditClick = (project: any) => {
     setSelectedProject(project);
     setIsEditProjectDialogOpen(true);
+  };
+
+  const handleDeleteClick = (project: any) => {
+    setSelectedProject(project);
+    setIsDeleteDialogOpen(true);
   };
 
   const formatDate = (dateString: string) => {
@@ -105,7 +120,15 @@ const Projects = () => {
   const uniqueClients = [...new Set(projects.map(p => p.client))];
 
   const ProjectCard = ({ project }: { project: any }) => (
-    <Card className="hover:shadow-lg transition-shadow duration-200">
+    <Card className="hover:shadow-lg transition-shadow duration-200 relative group">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={() => handleDeleteClick(project)}
+      >
+        <X className="h-3 w-3 text-red-500" strokeWidth={1.5}/>
+      </Button>
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
           <CardTitle className="text-lg font-semibold">{project.name}</CardTitle>
@@ -171,19 +194,8 @@ const Projects = () => {
           <div className="container mx-auto px-6 py-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-bold">📘 Projects</h1>
+                <h1 className="text-3xl font-bold">Projects</h1>
                 <span className="text-muted-foreground">({filteredProjects.length} projects)</span>
-              </div>
-              
-              <div className="flex items-center gap-3">
-                <Button onClick={() => setIsAddProjectDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add New Project
-                </Button>
-                <Button variant="outline" onClick={() => {}}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Export
-                </Button>
               </div>
             </div>
 
@@ -202,6 +214,10 @@ const Projects = () => {
               </div>
 
               <div className="flex items-center gap-3">
+                <Button onClick={() => setIsAddProjectDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add New Project
+                </Button>
                 <Select value={clientFilter} onValueChange={setClientFilter}>
                   <SelectTrigger className="w-40">
                     <Filter className="h-4 w-4 mr-2" />
@@ -331,6 +347,12 @@ const Projects = () => {
         onOpenChange={setIsEditProjectDialogOpen}
         onUpdateProject={handleUpdateProject}
         project={selectedProject}
+      />
+      <DeleteProjectDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        onConfirm={handleDeleteProject}
+        projectName={selectedProject?.name || ""}
       />
     </div>
   );

@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,7 @@ const EditProjectDialog = ({ open, onOpenChange, onUpdateProject, project }: Edi
   const [description, setDescription] = useState("");
   const [clientName, setClientName] = useState("");
   const [deadline, setDeadline] = useState<Date | undefined>();
+  const [status, setStatus] = useState("ongoing");
 
   useEffect(() => {
     if (project) {
@@ -41,6 +43,7 @@ const EditProjectDialog = ({ open, onOpenChange, onUpdateProject, project }: Edi
       if (project.deadline) {
         setDeadline(parseISO(project.deadline));
       }
+      setStatus(project.status || "ongoing");
     }
   }, [project]);
 
@@ -56,6 +59,7 @@ const EditProjectDialog = ({ open, onOpenChange, onUpdateProject, project }: Edi
       client: clientName,
       deadline: format(deadline, "yyyy-MM-dd"),
       description,
+      status,
     });
     onOpenChange(false);
   };
@@ -82,6 +86,19 @@ const EditProjectDialog = ({ open, onOpenChange, onUpdateProject, project }: Edi
           <div className="grid gap-2">
             <Label htmlFor="editClientName">Client Name</Label>
             <Input id="editClientName" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Enter Client Name" />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="editStatus">Status</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ongoing">🟢 Ongoing</SelectItem>
+                <SelectItem value="delayed">🔴 Delayed</SelectItem>
+                <SelectItem value="completed">✅ Complete</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="editDeadline">Deadline</Label>
