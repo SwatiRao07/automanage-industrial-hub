@@ -38,9 +38,10 @@ interface BOMCategoryCardProps {
   onDeletePart?: (partId: string) => void;
   onDeleteCategory?: (categoryName: string) => void;
   onEditCategory?: (oldName: string, newName: string) => void;
+  onStatusChange?: (partId: string, newStatus: string) => void;
 }
 
-const BOMCategoryCard = ({ category, onToggle, onPartClick, onQuantityChange, onDeleteCategory, onEditCategory }: BOMCategoryCardProps) => {
+const BOMCategoryCard = ({ category, onToggle, onPartClick, onQuantityChange, onDeleteCategory, onEditCategory, onStatusChange }: BOMCategoryCardProps) => {
   const [showConfirm, setShowConfirm] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(category.name);
@@ -119,6 +120,9 @@ const BOMCategoryCard = ({ category, onToggle, onPartClick, onQuantityChange, on
                 </div>
               </div>
               <div className="flex gap-2 items-center">
+                <Badge variant="outline" className="text-blue-600 border-blue-200">
+                  {getStatusCount('approved')} Approved
+                </Badge>
                 <Badge variant="outline" className="text-green-600 border-green-200">
                   {getStatusCount('received')} received
                 </Badge>
@@ -162,6 +166,7 @@ const BOMCategoryCard = ({ category, onToggle, onPartClick, onQuantityChange, on
                   onClick={() => onPartClick(item)}
                   onQuantityChange={onQuantityChange}
                   onDelete={onDeleteCategory}
+                  onStatusChange={onStatusChange}
                 />
               ))}
             </div>

@@ -45,9 +45,10 @@ interface BOMPartRowProps {
   onQuantityChange?: (partId: string, newQuantity: number) => void;
   allVendors?: Array<{ name: string; price: number; leadTime: string; availability: string }>;
   onDelete?: (partId: string) => void;
+  onStatusChange?: (partId: string, newStatus: string) => void;
 }
 
-const BOMPartRow = ({ part, onClick, onQuantityChange, allVendors = [], onDelete }: BOMPartRowProps) => {
+const BOMPartRow = ({ part, onClick, onQuantityChange, allVendors = [], onDelete, onStatusChange }: BOMPartRowProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [vendors, setVendors] = useState(part.vendors);
   const [form, setForm] = useState({ name: '', price: 0, leadTime: '', availability: '' });
@@ -97,6 +98,8 @@ const BOMPartRow = ({ part, onClick, onQuantityChange, allVendors = [], onDelete
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'approved':
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Approved</Badge>;
       case 'received':
         return <Badge className="bg-green-100 text-green-800 border-green-200">Received</Badge>;
       case 'ordered':
@@ -151,8 +154,18 @@ const BOMPartRow = ({ part, onClick, onQuantityChange, allVendors = [], onDelete
               Qty: {part.quantity}
               </div>
           </div>
-          {/* Only the status badge remains here */}
-          {getStatusBadge(part.status)}
+          {/* Status dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <span>{getStatusBadge(part.status)}</span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => onStatusChange?.(part.id, 'approved')}>Approved</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onStatusChange?.(part.id, 'ordered')}>Ordered</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onStatusChange?.(part.id, 'not-ordered')}>Not Ordered</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onStatusChange?.(part.id, 'received')}>Received</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>

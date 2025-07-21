@@ -534,6 +534,12 @@ const BOM = () => {
                       if (selectedPart && selectedPart.id === partId) setSelectedPart(null);
                     }}
                     onEditCategory={handleEditCategory}
+                    onStatusChange={(partId, newStatus) => {
+                      setCategories(prev => prev.map(cat => ({
+                        ...cat,
+                        items: cat.items.map(item => item.id === partId ? { ...item, status: newStatus } : item)
+                      })));
+                    }}
                   />
                 ))}
                 
