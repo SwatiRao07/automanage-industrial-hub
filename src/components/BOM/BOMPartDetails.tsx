@@ -176,7 +176,6 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
         name: vendorName,
         price: vendorCost ? Number(vendorCost) : undefined,
         leadTime: vendorLeadTime,
-        availability: color,
         qty: 1,
         documents: addVendorDocs,
       },
@@ -185,7 +184,6 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
     setVendorName('');
     setVendorLeadTime('');
     setVendorCost('');
-    setColor('In Stock');
     setAddVendorDocs([]);
     setAddVendorOpen(false);
   };
@@ -198,7 +196,6 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
     setEditVendorName(v.name || '');
     setEditPan('price' in v ? v.price : '');
     setEditGst('leadTime' in v ? v.leadTime : '');
-    setEditBank('availability' in v ? v.availability : 'In Stock');
     setEditVendorDocs(v.documents || []);
   };
   // Add state for confirming vendor doc deletion
@@ -217,7 +214,7 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
       }
     });
     // Save vendors and update part documents if changed
-    updateVendors(vendors.map((v, i) => i === editVendorIdx ? { ...v, name: editVendorName, price: Number(editPan), leadTime: editGst, availability: editBank, documents: editVendorDocs } : v));
+    updateVendors(vendors.map((v, i) => i === editVendorIdx ? { ...v, name: editVendorName, price: Number(editPan), leadTime: editGst, documents: editVendorDocs } : v));
     if (updatedPartDocs !== (partState?.documents || [])) {
       setPartState(prev => prev ? { ...prev, documents: updatedPartDocs } : prev);
       if (typeof onUpdatePart === 'function' && partState) {
@@ -499,7 +496,8 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
               return (
                 <div
                   key={index}
-                  className="border border-gray-200 rounded-lg p-3 flex flex-col gap-2 relative"
+                  className={`border border-gray-200 rounded-lg p-3 flex flex-col gap-2 relative cursor-pointer ${selectedVendorIdx === index ? 'bg-blue-50 border-blue-300' : ''}`}
+                  onClick={() => setSelectedVendorIdx(index)}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-semibold text-base">{vendor.name}</span>
@@ -540,6 +538,20 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                 </div>
               );
             })}
+            {selectedVendorIdx !== null && vendors[selectedVendorIdx] && (
+              <div className="flex justify-end mt-4">
+                <Button
+                  className="bg-blue-600 text-white px-6 py-2 rounded"
+                  onClick={() => {
+                    if (typeof onUpdatePart === 'function' && partState) {
+                      onUpdatePart({ ...partState, finalizedVendor: vendors[selectedVendorIdx] });
+                    }
+                  }}
+                >
+                  Proceed
+                </Button>
+              </div>
+            )}
             {/* Edit Vendor Dialog */}
             <Dialog open={editVendorIdx !== undefined} onOpenChange={v => { if (!v) setEditVendorIdx(undefined); }}>
               <DialogContent>
@@ -558,14 +570,6 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                   <div>
                     <label className="block text-sm font-medium mb-1">Lead Time</label>
                     <input className="w-full border rounded p-2" value={editGst} onChange={e => setEditGst(e.target.value)} placeholder="Enter lead time" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Stock Status</label>
-                    <select className="w-full border rounded p-2" value={editBank} onChange={e => setEditBank(e.target.value)}>
-                      <option value="In Stock">In Stock</option>
-                      <option value="Limited Stock">Limited Stock</option>
-                      <option value="Out of Stock">Out of Stock</option>
-                    </select>
                   </div>
                 </form>
                 <div className="mt-3 text-left">
