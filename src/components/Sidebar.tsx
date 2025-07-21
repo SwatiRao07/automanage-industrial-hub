@@ -21,7 +21,7 @@ const menuItems = [
   { icon: FolderOpen, label: 'Projects', path: '/projects' },
   { icon: Package, label: 'Inventory', path: '/inventory' },
   { icon: ShoppingCart, label: 'Purchase Orders', path: '/purchase-orders' },
-  { icon: FileText, label: 'BOMs', path: '/boms' },
+  { icon: FileText, label: 'BOMs', path: '/bom' },
   { icon: Clock, label: 'Time Tracking', path: '/time-tracking' },
   { icon: Calculator, label: 'Cost Analysis', path: '/cost-analysis' },
   { icon: Activity, label: 'Reports', path: '/reports' },
@@ -39,7 +39,8 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
   return (
     <div className={cn(
       "bg-slate-900 text-white flex flex-col transition-all duration-300 ease-in-out relative",
-      collapsed ? "w-16" : "w-64"
+      collapsed ? "w-16" : "w-64",
+      "h-screen fixed top-0 left-0 z-40"
     )}>
       {/* Header */}
       <div className="p-4 border-b border-slate-700">
@@ -66,25 +67,50 @@ const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
             const isActive = location.pathname === item.path;
             return (
               <li key={item.path}>
-                <NavLink
-                  to={item.path}
-                  className={cn(
-                    "flex items-center p-3 rounded-lg transition-all duration-200",
-                    "hover:bg-slate-700 group",
-                    isActive ? "bg-blue-600 text-white" : "text-slate-300",
-                    collapsed ? "justify-center" : "justify-start"
-                  )}
-                >
-                  <item.icon size={20} className="flex-shrink-0" />
-                  {!collapsed && (
-                    <span className="ml-3 font-medium">{item.label}</span>
-                  )}
-                  {collapsed && (
-                    <div className="absolute left-16 bg-slate-800 text-white px-2 py-1 rounded-md text-sm opacity-0 group-hover:opacity-100 pointer-events-none z-50 whitespace-nowrap">
-                      {item.label}
-                    </div>
-                  )}
-                </NavLink>
+                {item.openInNewTab ? (
+                  <a
+                    href={item.path}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      "flex items-center p-3 rounded-lg transition-all duration-200",
+                      "hover:bg-slate-700 group",
+                      isActive ? "bg-blue-600 text-white" : "text-slate-300",
+                      collapsed ? "justify-center" : "justify-start"
+                    )}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <item.icon size={20} className="flex-shrink-0" />
+                    {!collapsed && (
+                      <span className="ml-3 font-medium">{item.label}</span>
+                    )}
+                    {collapsed && (
+                      <div className="absolute left-16 bg-slate-800 text-white px-2 py-1 rounded-md text-sm opacity-0 group-hover:opacity-100 pointer-events-none z-50 whitespace-nowrap">
+                        {item.label}
+                      </div>
+                    )}
+                  </a>
+                ) : (
+                  <NavLink
+                    to={item.path}
+                    className={cn(
+                      "flex items-center p-3 rounded-lg transition-all duration-200",
+                      "hover:bg-slate-700 group",
+                      isActive ? "bg-blue-600 text-white" : "text-slate-300",
+                      collapsed ? "justify-center" : "justify-start"
+                    )}
+                  >
+                    <item.icon size={20} className="flex-shrink-0" />
+                    {!collapsed && (
+                      <span className="ml-3 font-medium">{item.label}</span>
+                    )}
+                    {collapsed && (
+                      <div className="absolute left-16 bg-slate-800 text-white px-2 py-1 rounded-md text-sm opacity-0 group-hover:opacity-100 pointer-events-none z-50 whitespace-nowrap">
+                        {item.label}
+                      </div>
+                    )}
+                  </NavLink>
+                )}
               </li>
             );
           })}

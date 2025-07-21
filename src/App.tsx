@@ -9,6 +9,7 @@ import BOM from "./pages/BOM";
 import TimeTracking from "./pages/TimeTracking";
 import CostAnalysis from "./pages/CostAnalysis";
 import NotFound from "./pages/NotFound";
+import Vendors from "./pages/Vendors";
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/bom" element={<BOM />} />
+          <Route path="/vendors" element={<Vendors />} />
           <Route path="/time-tracking" element={<TimeTracking />} />
           <Route path="/cost-analysis" element={<CostAnalysis />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

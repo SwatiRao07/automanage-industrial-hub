@@ -13,8 +13,8 @@ const CostCalculationTab = () => {
   // Mock data - in real app, this would come from the time entry tab and BOM
   const totalHours = 135;
   const bomCost = 450000;
-  const totalLaborCost = totalHours * hourlyRate;
-  const totalProjectCost = bomCost + totalLaborCost;
+  const totalEngineerCost = totalHours * hourlyRate;
+  const totalProjectCost = bomCost + totalEngineerCost;
   const profitOrLoss = projectBudget - totalProjectCost;
   const isProfit = profitOrLoss > 0;
   const budgetUtilization = (totalProjectCost / projectBudget) * 100;
@@ -80,8 +80,8 @@ const CostCalculationTab = () => {
                   <span className="font-semibold">{totalHours} hours</span>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b">
-                  <span className="text-sm font-medium">Labor Cost ({totalHours}h × ₹{hourlyRate})</span>
-                  <span className="font-semibold">{formatCurrency(totalLaborCost)}</span>
+                  <span className="text-sm font-medium">Engineer Cost ({totalHours}h × ₹{hourlyRate})</span>
+                  <span className="font-semibold">{formatCurrency(totalEngineerCost)}</span>
                 </div>
               </div>
               <div className="bg-muted p-4 rounded-lg">
@@ -165,9 +165,9 @@ const CostCalculationTab = () => {
               <p className="text-lg font-bold">₹{hourlyRate}</p>
             </div>
             <div className="text-center p-4 bg-muted rounded-lg">
-              <p className="text-sm text-muted-foreground">Material vs Labor</p>
+              <p className="text-sm text-muted-foreground">Material vs Engineer</p>
               <p className="text-lg font-bold">
-                {((bomCost / totalProjectCost) * 100).toFixed(0)}% / {((totalLaborCost / totalProjectCost) * 100).toFixed(0)}%
+                {((bomCost / totalProjectCost) * 100).toFixed(0)}% / {((totalEngineerCost / totalProjectCost) * 100).toFixed(0)}%
               </p>
             </div>
             <div className="text-center p-4 bg-muted rounded-lg">

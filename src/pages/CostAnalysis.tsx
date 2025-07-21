@@ -25,8 +25,8 @@ const CostAnalysis = () => {
     bomCost: 450000,
   };
 
-  const laborCost = projectData.totalHours * costPerHour;
-  const totalCost = projectData.bomCost + laborCost;
+  const engineerCost = projectData.totalHours * costPerHour;
+  const totalCost = projectData.bomCost + engineerCost;
   const profitLoss = estimatedBudget - totalCost;
   const isProfit = profitLoss > 0;
   const budgetUsage = (totalCost / estimatedBudget) * 100;
@@ -49,18 +49,18 @@ const CostAnalysis = () => {
   // Chart data
   const costCompositionData = [
     { name: "BOM Cost", value: projectData.bomCost, color: "#8B5CF6" },
-    { name: "Labor Cost", value: laborCost, color: "#06B6D4" },
+    { name: "Engineer Cost", value: engineerCost, color: "#06B6D4" },
   ];
 
   const monthlyCostData = [
-    { month: "Jan", materials: 150000, labor: 45000 },
-    { month: "Feb", materials: 200000, labor: 60000 },
-    { month: "Mar", materials: 100000, labor: 90000 },
+    { month: "Jan", materials: 150000, engineer: 45000 },
+    { month: "Feb", materials: 200000, engineer: 60000 },
+    { month: "Mar", materials: 100000, engineer: 90000 },
   ];
 
   const budgetVsActualData = [
     { category: "Materials", estimated: 500000, actual: projectData.bomCost },
-    { category: "Labor", estimated: 180000, actual: laborCost },
+    { category: "Engineer", estimated: 180000, actual: engineerCost },
   ];
 
   const profitabilityData = [
@@ -72,7 +72,7 @@ const CostAnalysis = () => {
 
   const costItemsData = [
     { category: "BOM", description: "Material and component costs", cost: projectData.bomCost, notes: "From BOM tab" },
-    { category: "Labor", description: `${projectData.totalHours} hrs @ ₹${costPerHour}/hr`, cost: laborCost, notes: "Auto-calculated" },
+    { category: "Engineer", description: `${projectData.totalHours} hrs @ ₹${costPerHour}/hr`, cost: engineerCost, notes: "Auto-calculated" },
     { category: "Miscellaneous", description: "Transport, overhead", cost: 25000, notes: "Manually added" },
   ];
 
@@ -180,13 +180,13 @@ const CostAnalysis = () => {
                 </div>
                 <div className="flex justify-between items-center py-2 border-b">
                   <span className="text-sm font-medium">Engineering Cost</span>
-                  <span className="font-semibold">{formatCurrency(laborCost)}</span>
+                  <span className="font-semibold">{formatCurrency(engineerCost)}</span>
                 </div>
               </div>
               <div className="bg-muted p-6 rounded-lg text-center">
                 <p className="text-sm text-muted-foreground mb-2">Total Project Cost</p>
                 <p className="text-3xl font-bold text-primary">{formatCurrency(totalCost)}</p>
-                <p className="text-xs text-muted-foreground mt-2">BOM + Labor</p>
+                <p className="text-xs text-muted-foreground mt-2">BOM + Engineer</p>
               </div>
             </div>
           </CardContent>
@@ -290,7 +290,7 @@ const CostAnalysis = () => {
                   <YAxis tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`} />
                   <Tooltip formatter={(value) => formatCurrency(value as number)} />
                   <Bar dataKey="materials" fill="#8B5CF6" name="Materials" />
-                  <Bar dataKey="labor" fill="#06B6D4" name="Labor" />
+                  <Bar dataKey="engineer" fill="#06B6D4" name="Engineer" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
