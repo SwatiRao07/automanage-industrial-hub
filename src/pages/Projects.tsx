@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Plus, Filter, Grid, Table, Download, Calendar, User, FileText } from "lucide-react";
+import { Search, Plus, Filter, Grid, List, Download, Calendar, User, FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table as TableComponent, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import Sidebar from "@/components/Sidebar";
+import AddProjectDialog from "@/components/Project/AddProjectDialog";
 
 const Projects = () => {
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
@@ -16,16 +17,16 @@ const Projects = () => {
   const [clientFilter, setClientFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isAddProjectDialogOpen, setIsAddProjectDialogOpen] = useState(false);
 
   // Mock project data
-  const projects = [
+  const [projects, setProjects] = useState([
     {
       id: "PRJ-001",
       name: "Vision AI System",
       client: "ABC Corporation",
       deadline: "2025-08-25",
       status: "ongoing",
-      progress: 65,
       description: "AI-powered computer vision system for manufacturing quality control"
     },
     {
@@ -34,7 +35,6 @@ const Projects = () => {
       client: "XYZ Industries",
       deadline: "2025-09-12",
       status: "delayed",
-      progress: 45,
       description: "Touch-based human machine interface for industrial automation"
     },
     {
@@ -43,7 +43,6 @@ const Projects = () => {
       client: "TechFlow Ltd",
       deadline: "2025-07-30",
       status: "completed",
-      progress: 100,
       description: "Wireless sensor network for environmental monitoring"
     },
     {
@@ -52,10 +51,9 @@ const Projects = () => {
       client: "AutoMech Corp",
       deadline: "2025-10-15",
       status: "ongoing",
-      progress: 30,
       description: "Precision control system for 6-DOF robotic arm"
     }
-  ];
+  ]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -68,6 +66,10 @@ const Projects = () => {
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
+  };
+
+  const handleAddProject = (newProject: any) => {
+    setProjects([newProject, ...projects]);
   };
 
   const formatDate = (dateString: string) => {
@@ -119,18 +121,6 @@ const Projects = () => {
           <span className="text-muted-foreground">{formatDate(project.deadline)}</span>
         </div>
 
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>Progress</span>
-            <span className="font-medium">{project.progress}%</span>
-          </div>
-          <div className="w-full bg-secondary rounded-full h-2">
-            <div 
-              className="bg-primary h-2 rounded-full transition-all duration-300" 
-              style={{ width: `${project.progress}%` }}
-            />
-          </div>
-        </div>
       </CardContent>
       
       <CardFooter className="pt-0">
@@ -169,7 +159,7 @@ const Projects = () => {
               </div>
               
               <div className="flex items-center gap-3">
-                <Button>
+                <Button onClick={() => setIsAddProjectDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add New Project
                 </Button>
@@ -229,7 +219,8 @@ const Projects = () => {
                     onClick={() => setViewMode("cards")}
                     className="rounded-r-none"
                   >
-                    <Grid className="h-4 w-4" />
+                    <Grid className="h-4 w-4 mr-2" />
+                    Cards
                   </Button>
                   <Button
                     variant={viewMode === "table" ? "default" : "ghost"}
@@ -237,7 +228,8 @@ const Projects = () => {
                     onClick={() => setViewMode("table")}
                     className="rounded-l-none"
                   >
-                    <Table className="h-4 w-4" />
+                    <List className="h-4 w-4 mr-2" />
+                    Table
                   </Button>
                 </div>
               </div>
@@ -249,7 +241,7 @@ const Projects = () => {
         <div className="container mx-auto px-6 py-8">
           {viewMode === "cards" ? (
             /* Card View */
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProjects.map((project) => (
                 <ProjectCard key={project.id} project={project} />
               ))}
@@ -265,7 +257,6 @@ const Projects = () => {
                     <TableHead>Client</TableHead>
                     <TableHead>Deadline</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Progress</TableHead>
                     <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -282,17 +273,6 @@ const Projects = () => {
                       <TableCell>{project.client}</TableCell>
                       <TableCell>{formatDate(project.deadline)}</TableCell>
                       <TableCell>{getStatusBadge(project.status)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 bg-secondary rounded-full h-2">
-                            <div 
-                              className="bg-primary h-2 rounded-full" 
-                              style={{ width: `${project.progress}%` }}
-                            />
-                          </div>
-                          <span className="text-sm font-medium">{project.progress}%</span>
-                        </div>
-                      </TableCell>
                       <TableCell>
                         <div className="flex gap-1 justify-center">
                           <Button asChild variant="outline" size="sm">
@@ -324,6 +304,11 @@ const Projects = () => {
           )}
         </div>
       </div>
+      <AddProjectDialog
+        open={isAddProjectDialogOpen}
+        onOpenChange={setIsAddProjectDialogOpen}
+        onAddProject={handleAddProject}
+      />
     </div>
   );
 };
