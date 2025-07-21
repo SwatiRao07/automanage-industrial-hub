@@ -510,16 +510,6 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                     <span className="flex items-center gap-1 text-sm"><Clock size={16} />{leadTime}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-500">Qty:</span>
-                    <button className="px-2 py-1 border rounded text-sm" onClick={() => {
-                      const newQty = vendor.qty - 1;
-                      if (newQty > 0) updateVendors(vendors.map((v, i) => i === index ? { ...v, qty: newQty } : v));
-                    }}>-</button>
-                    <span className="font-medium text-sm">{qty}</span>
-                    <button className="px-2 py-1 border rounded text-sm" onClick={() => {
-                      const newQty = vendor.qty + 1;
-                      updateVendors(vendors.map((v, i) => i === index ? { ...v, qty: newQty } : v));
-                    }}>+</button>
                     <div className="ml-auto flex items-center gap-2">
                       <button className="text-gray-500 hover:bg-gray-100 rounded-full p-2" onClick={() => handleEditVendorOpen(index)}>
                         <Pencil size={18} />
