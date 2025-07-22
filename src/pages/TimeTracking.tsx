@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Clock, Calculator } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import TimeEntryTab from "@/components/TimeTracking/TimeEntryTab";
-import CostCalculationTab from "@/components/TimeTracking/CostCalculationTab";
 import Sidebar from '@/components/Sidebar';
 
 const TimeTracking = () => {
@@ -42,21 +41,14 @@ const TimeTracking = () => {
         </div>
       </div>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsList className="grid w-full grid-cols-1 max-w-md">
             <TabsTrigger value="time-entry" className="flex items-center gap-2">
               <Clock className="h-4 w-4" />
               Time Entry
             </TabsTrigger>
-            <TabsTrigger value="cost-calculation" className="flex items-center gap-2">
-              <Calculator className="h-4 w-4" />
-              Cost Analysis
-            </TabsTrigger>
           </TabsList>
           <TabsContent value="time-entry" className="mt-6">
             <TimeEntryTab />
-          </TabsContent>
-          <TabsContent value="cost-calculation" className="mt-6">
-            <CostCalculationTab />
           </TabsContent>
         </Tabs>
           </div>
