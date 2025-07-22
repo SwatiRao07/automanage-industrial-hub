@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,13 +83,37 @@ const CostAnalysis = () => {
     { week: "Week 4", profit: profitLoss },
   ];
 
-  const costItemsData = [
-    { category: "BOM", description: "Material and component costs", cost: projectData.bomCost, notes: "From BOM tab" },
-    { category: "Engineer", description: `${projectData.totalHours} hrs @ ₹${costPerHour}/hr`, cost: engineerCost, notes: "Auto-calculated" },
-    { category: "Miscellaneous", description: "Transport, overhead", cost: miscCost, notes: "Manually added" },
-  ];
+  // Editable descriptions for cost items
+  const [costDescriptions, setCostDescriptions] = useState([
+    "Material and component costs",
+    `${projectData.totalHours} hrs @ ₹${costPerHour}/hr`,
+    "Transport, overhead",
+  ]);
+  const [editingDescIdx, setEditingDescIdx] = useState<number | null>(null);
+  const descInputRef = useRef<HTMLInputElement>(null);
+
+  // Update engineer description if hours or rate changes
+  useEffect(() => {
+    setCostDescriptions((prev) => [
+      prev[0],
+      `${projectData.totalHours} hrs @ ₹${costPerHour}/hr`,
+      prev[2],
+    ]);
+  }, [projectData.totalHours, costPerHour]);
+
+  const handleDescChange = (idx: number, value: string) => {
+    setCostDescriptions((prev) => prev.map((desc, i) => (i === idx ? value : desc)));
+  };
+
+  const handleDescBlur = () => setEditingDescIdx(null);
 
   const statusBadge = getStatusBadge();
+
+  const costItemsData = [
+    { category: "BOM", description: costDescriptions[0], cost: projectData.bomCost, notes: "From BOM tab" },
+    { category: "Engineer", description: costDescriptions[1], cost: engineerCost, notes: "Auto-calculated" },
+    { category: "Miscellaneous", description: costDescriptions[2], cost: miscCost, notes: "Manually added" },
+  ];
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -399,7 +423,35 @@ const CostAnalysis = () => {
                     {costItemsData.map((item, index) => (
                       <tr key={index} className="border-b">
                         <td className="py-3 px-4 font-medium">{item.category}</td>
-                        <td className="py-3 px-4">{item.description}</td>
+                        <td className="py-3 px-4">
+                          {index === 2 ? (
+                            editingDescIdx === index ? (
+                              <Input
+                                ref={descInputRef}
+                                value={costDescriptions[index]}
+                                onChange={e => handleDescChange(index, e.target.value)}
+                                onBlur={handleDescBlur}
+                                onKeyDown={e => { if (e.key === 'Enter') handleDescBlur(); }}
+                                className="w-full h-8"
+                                autoFocus
+                              />
+                            ) : (
+                              <span className="flex items-center">
+                                {item.description}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditingDescIdx(index)}
+                                  className="h-6 w-6 p-0 ml-2"
+                                >
+                                  <Edit2 className="h-3 w-3" />
+                                </Button>
+                              </span>
+                            )
+                          ) : (
+                            item.description
+                          )}
+                        </td>
                         <td className="py-3 px-4 text-right font-semibold">{formatCurrency(item.cost)}</td>
                         <td className="py-3 px-4 text-sm text-muted-foreground">{item.notes}</td>
                       </tr>
