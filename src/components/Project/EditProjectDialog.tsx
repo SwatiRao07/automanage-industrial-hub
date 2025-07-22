@@ -18,6 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
+import { getDoc, setDoc, doc, deleteDoc } from "firebase/firestore";
+import { db } from "@/firebase";
 
 interface EditProjectDialogProps {
   open: boolean;
@@ -32,36 +34,66 @@ const EditProjectDialog = ({ open, onOpenChange, onUpdateProject, project }: Edi
   const [description, setDescription] = useState("");
   const [clientName, setClientName] = useState("");
   const [deadline, setDeadline] = useState<Date | undefined>();
-  const [status, setStatus] = useState("ongoing");
+  const [status, setStatus] = useState("Ongoing");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (project) {
-      setProjectName(project.name);
-      setProjectId(project.id);
-      setDescription(project.description);
-      setClientName(project.client);
+      setProjectName(project.projectName || "");
+      setProjectId(project.projectId || "");
+      setDescription(project.description || "");
+      setClientName(project.clientName || "");
       if (project.deadline) {
         setDeadline(parseISO(project.deadline));
       }
-      setStatus(project.status || "ongoing");
+      setStatus(project.status || "Ongoing");
+      setError(null);
     }
   }, [project]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    setError(null);
     if (!projectName || !projectId || !clientName || !deadline) {
-      alert("Please fill all required fields.");
+      setError("Please fill all required fields.");
       return;
     }
-    onUpdateProject({
-      ...project,
-      id: projectId,
-      name: projectName,
-      client: clientName,
-      deadline: format(deadline, "yyyy-MM-dd"),
-      description,
-      status,
-    });
-    onOpenChange(false);
+    const oldProjectId = project?.projectId;
+    if (projectId !== oldProjectId) {
+      // Check uniqueness for new Project ID
+      const newDocRef = doc(db, "projects", projectId);
+      const newDocSnap = await getDoc(newDocRef);
+      if (newDocSnap.exists()) {
+        setError("Project ID already exists. Please choose a different ID.");
+        return;
+      }
+      // Copy data to new doc, delete old doc
+      const updatedData = {
+        projectId,
+        projectName,
+        clientName,
+        description,
+        status,
+        deadline: format(deadline, "yyyy-MM-dd"),
+      };
+      await setDoc(newDocRef, updatedData);
+      if (oldProjectId) {
+        await deleteDoc(doc(db, "projects", oldProjectId));
+      }
+      onUpdateProject(updatedData);
+      onOpenChange(false); // Only close on success
+    } else {
+      // Just update existing doc
+      onUpdateProject({
+        ...project,
+        projectId,
+        projectName,
+        clientName,
+        description,
+        status,
+        deadline: format(deadline, "yyyy-MM-dd"),
+      });
+      onOpenChange(false); // Only close on success
+    }
   };
 
   return (
@@ -70,6 +102,7 @@ const EditProjectDialog = ({ open, onOpenChange, onUpdateProject, project }: Edi
         <DialogHeader>
           <DialogTitle>Edit Project</DialogTitle>
         </DialogHeader>
+        {error && <div className="text-red-500 text-sm mb-2">{error}</div>}
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
             <Label htmlFor="editProjectName">Project Name</Label>
@@ -77,7 +110,7 @@ const EditProjectDialog = ({ open, onOpenChange, onUpdateProject, project }: Edi
           </div>
           <div className="grid gap-2">
             <Label htmlFor="editProjectId">Project ID</Label>
-            <Input id="editProjectId" value={projectId} onChange={(e) => setProjectId(e.target.value)} placeholder="Enter ID" disabled />
+            <Input id="editProjectId" value={projectId} onChange={(e) => setProjectId(e.target.value)} placeholder="Enter ID" />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="editDescription">Description</Label>
@@ -94,9 +127,9 @@ const EditProjectDialog = ({ open, onOpenChange, onUpdateProject, project }: Edi
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ongoing">🟢 Ongoing</SelectItem>
-                <SelectItem value="delayed">🔴 Delayed</SelectItem>
-                <SelectItem value="completed">✅ Complete</SelectItem>
+                <SelectItem value="Ongoing">🟢 Ongoing</SelectItem>
+                <SelectItem value="Delayed">🔴 Delayed</SelectItem>
+                <SelectItem value="Completed">✅ Completed</SelectItem>
               </SelectContent>
             </Select>
           </div>

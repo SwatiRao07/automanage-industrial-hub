@@ -5,13 +5,13 @@ import { getAuth, signInAnonymously } from "firebase/auth";
 
 // ✅ Your Firebase Config (use the one you posted)
 const firebaseConfig = {
-  apiKey: "AIzaSyCrqIzOQG2I87LCTcBBAAAXEjJBTD2NV2Q",
-  authDomain: "bom-page.firebaseapp.com",
-  projectId: "bom-page",
-  storageBucket: "bom-page.firebasestorage.app",
-  messagingSenderId: "443487359138",
-  appId: "1:443487359138:web:0cce9814a9b59ba5aec7fb",
-  measurementId: "G-HRWHM191JV"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 // ✅ Initialize Firebase services

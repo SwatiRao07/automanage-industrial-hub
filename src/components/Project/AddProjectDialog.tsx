@@ -18,6 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { getDoc, doc } from "firebase/firestore";
+import { db } from "@/firebase";
 
 interface AddProjectDialogProps {
   open: boolean;
@@ -31,12 +33,20 @@ const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialog
   const [description, setDescription] = useState("");
   const [clientName, setClientName] = useState("");
   const [deadline, setDeadline] = useState<Date | undefined>();
-  const [status, setStatus] = useState("ongoing");
+  const [status, setStatus] = useState("Ongoing");
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    setError(null);
     if (!projectName || !projectId || !clientName || !deadline) {
-      // Basic validation
-      alert("Please fill all required fields.");
+      setError("Please fill all required fields.");
+      return;
+    }
+    // Check uniqueness of Project ID
+    const projectRef = doc(db, "projects", projectId);
+    const projectSnap = await getDoc(projectRef);
+    if (projectSnap.exists()) {
+      setError("Project ID already exists. Please choose a different ID.");
       return;
     }
     onAddProject({
@@ -53,7 +63,7 @@ const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialog
     setDescription("");
     setClientName("");
     setDeadline(undefined);
-    setStatus("ongoing");
+    setStatus("Ongoing");
     onOpenChange(false);
   };
 
@@ -64,6 +74,7 @@ const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialog
           <DialogTitle>Add New Project</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          {error && <div className="text-red-500 text-sm">{error}</div>}
           <div className="grid gap-2">
             <Label htmlFor="projectName">Project Name</Label>
             <Input id="projectName" value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="Enter Project Name" />
@@ -87,9 +98,9 @@ const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialog
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ongoing">🟢 Ongoing</SelectItem>
-                <SelectItem value="delayed">🔴 Delayed</SelectItem>
-                <SelectItem value="completed">✅ Completed</SelectItem>
+                <SelectItem value="Ongoing">🟢 Ongoing</SelectItem>
+                <SelectItem value="Delayed">🔴 Delayed</SelectItem>
+                <SelectItem value="Completed">✅ Completed</SelectItem>
               </SelectContent>
             </Select>
           </div>

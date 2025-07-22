@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, Plus, Filter, Grid, List, Download, Calendar, User, FileText, Edit, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import Sidebar from "@/components/Sidebar";
 import AddProjectDialog from "@/components/Project/AddProjectDialog";
 import EditProjectDialog from "@/components/Project/EditProjectDialog";
 import DeleteProjectDialog from "@/components/Project/DeleteProjectDialog";
+import { addProject, subscribeToProjects, updateProject, deleteProject, Project as FirestoreProject } from "@/utils/projectFirestore";
 
 const Projects = () => {
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
@@ -23,67 +24,57 @@ const Projects = () => {
   const [isEditProjectDialogOpen, setIsEditProjectDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<any | null>(null);
+  const [projects, setProjects] = useState<FirestoreProject[]>([]);
 
-  // Mock project data
-  const [projects, setProjects] = useState([
-    {
-      id: "PRJ-001",
-      name: "Vision AI System",
-      client: "ABC Corporation",
-      deadline: "2025-08-25",
-      status: "ongoing",
-      description: "AI-powered computer vision system for manufacturing quality control"
-    },
-    {
-      id: "PRJ-002", 
-      name: "Smart HMI Interface",
-      client: "XYZ Industries",
-      deadline: "2025-09-12",
-      status: "delayed",
-      description: "Touch-based human machine interface for industrial automation"
-    },
-    {
-      id: "PRJ-003",
-      name: "IoT Sensor Network",
-      client: "TechFlow Ltd",
-      deadline: "2025-07-30",
-      status: "completed",
-      description: "Wireless sensor network for environmental monitoring"
-    },
-    {
-      id: "PRJ-004",
-      name: "Robotic Arm Controller",
-      client: "AutoMech Corp",
-      deadline: "2025-10-15",
-      status: "ongoing",
-      description: "Precision control system for 6-DOF robotic arm"
-    }
-  ]);
+  useEffect(() => {
+    // Subscribe to Firestore projects
+    const unsubscribe = subscribeToProjects((fetchedProjects) => {
+      setProjects(fetchedProjects);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "ongoing":
+      case "Ongoing":
         return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">🟢 Ongoing</Badge>;
-      case "delayed":
+      case "Delayed":
         return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">🔴 Delayed</Badge>;
-      case "completed":
+      case "Completed":
         return <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">✅ Completed</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }
   };
 
-  const handleAddProject = (newProject: any) => {
-    setProjects([newProject, ...projects]);
+  const handleAddProject = async (newProject: any) => {
+    // Map dialog fields to Firestore schema
+    const project: FirestoreProject = {
+      projectId: newProject.id,
+      projectName: newProject.name,
+      clientName: newProject.client,
+      description: newProject.description,
+      status: mapStatusToFirestore(newProject.status),
+      deadline: newProject.deadline,
+    };
+    await addProject(project);
   };
 
-  const handleUpdateProject = (updatedProject: any) => {
-    setProjects(projects.map(p => p.id === updatedProject.id ? updatedProject : p));
+  const handleUpdateProject = async (updatedProject: any) => {
+    const projectId = updatedProject.projectId;
+    const updates: Partial<FirestoreProject> = {
+      projectName: updatedProject.projectName,
+      clientName: updatedProject.clientName,
+      description: updatedProject.description,
+      status: mapStatusToFirestore(updatedProject.status),
+      deadline: updatedProject.deadline,
+    };
+    await updateProject(projectId, updates);
   };
 
-  const handleDeleteProject = () => {
+  const handleDeleteProject = async () => {
     if (selectedProject) {
-      setProjects(projects.filter(p => p.id !== selectedProject.id));
+      await deleteProject(selectedProject.projectId);
       setIsDeleteDialogOpen(false);
       setSelectedProject(null);
     }
@@ -108,16 +99,16 @@ const Projects = () => {
   };
 
   const filteredProjects = projects.filter(project => {
-    const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         project.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         project.id.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesClient = clientFilter === "all" || project.client === clientFilter;
+    const matchesSearch =
+      (project.projectName ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (project.clientName ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (project.projectId ?? "").toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesClient = clientFilter === "all" || project.clientName === clientFilter;
     const matchesStatus = statusFilter === "all" || project.status === statusFilter;
-    
     return matchesSearch && matchesClient && matchesStatus;
   });
 
-  const uniqueClients = [...new Set(projects.map(p => p.client))];
+  const uniqueClients = [...new Set(projects.map(p => p.clientName))];
 
   const ProjectCard = ({ project }: { project: any }) => (
     <Card className="hover:shadow-lg transition-shadow duration-200 relative group">
@@ -131,7 +122,7 @@ const Projects = () => {
       </Button>
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
-          <CardTitle className="text-lg font-semibold">{project.name}</CardTitle>
+          <CardTitle className="text-lg font-semibold">{project.projectName}</CardTitle>
           <div className="flex items-center gap-2">
             {getStatusBadge(project.status)}
             <Button variant="ghost" size="sm" onClick={() => handleEditClick(project)}>
@@ -146,13 +137,13 @@ const Projects = () => {
         <div className="flex items-center gap-2 text-sm">
           <FileText className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium">ID:</span>
-          <span className="text-muted-foreground">{project.id}</span>
+          <span className="text-muted-foreground">{project.projectId}</span>
         </div>
         
         <div className="flex items-center gap-2 text-sm">
           <User className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium">Client:</span>
-          <span className="text-muted-foreground">{project.client}</span>
+          <span className="text-muted-foreground">{project.clientName}</span>
         </div>
         
         <div className="flex items-center gap-2 text-sm">
@@ -166,17 +157,17 @@ const Projects = () => {
       <CardFooter className="pt-0">
         <div className="flex gap-2 w-full">
           <Button asChild variant="outline" size="sm" className="flex-1">
-            <Link to={`/bom?project=${project.id}`}>
+            <Link to={`/bom?project=${project.projectId}`}>
               🔧 BOM
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm" className="flex-1">
-            <Link to={`/time-tracking?project=${project.id}`}>
+            <Link to={`/time-tracking?project=${project.projectId}`}>
               ⏱️ Time
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm" className="flex-1">
-            <Link to={`/cost-analysis?project=${project.id}`}>
+            <Link to={`/cost-analysis?project=${project.projectId}`}>
               💰 Cost
             </Link>
           </Button>
@@ -237,9 +228,9 @@ const Projects = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="ongoing">Ongoing</SelectItem>
-                    <SelectItem value="delayed">Delayed</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="Ongoing">Ongoing</SelectItem>
+                    <SelectItem value="Delayed">Delayed</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -276,7 +267,7 @@ const Projects = () => {
             /* Card View */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProjects.map((project) => (
-                <ProjectCard key={project.id} project={project} />
+                <ProjectCard key={project.projectId} project={project} />
               ))}
             </div>
           ) : (
@@ -295,27 +286,27 @@ const Projects = () => {
                 </TableHeader>
                 <TableBody>
                   {filteredProjects.map((project) => (
-                    <TableRow key={project.id} className="hover:bg-muted/50">
+                    <TableRow key={project.projectId} className="hover:bg-muted/50">
                       <TableCell>
                         <div>
-                          <div className="font-medium">{project.name}</div>
+                          <div className="font-medium">{project.projectName}</div>
                           <div className="text-sm text-muted-foreground">{project.description}</div>
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono">{project.id}</TableCell>
-                      <TableCell>{project.client}</TableCell>
+                      <TableCell className="font-mono">{project.projectId}</TableCell>
+                      <TableCell>{project.clientName}</TableCell>
                       <TableCell>{formatDate(project.deadline)}</TableCell>
                       <TableCell>{getStatusBadge(project.status)}</TableCell>
                       <TableCell>
                         <div className="flex gap-1 justify-center">
                           <Button asChild variant="outline" size="sm">
-                            <Link to={`/bom?project=${project.id}`}>🔧</Link>
+                            <Link to={`/bom?project=${project.projectId}`}>🔧</Link>
                           </Button>
                           <Button asChild variant="outline" size="sm">
-                            <Link to={`/time-tracking?project=${project.id}`}>⏱️</Link>
+                            <Link to={`/time-tracking?project=${project.projectId}`}>⏱️</Link>
                           </Button>
                           <Button asChild variant="outline" size="sm">
-                            <Link to={`/cost-analysis?project=${project.id}`}>💰</Link>
+                            <Link to={`/cost-analysis?project=${project.projectId}`}>💰</Link>
                           </Button>
                         </div>
                       </TableCell>
@@ -352,10 +343,18 @@ const Projects = () => {
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         onConfirm={handleDeleteProject}
-        projectName={selectedProject?.name || ""}
+        projectName={selectedProject?.projectName || ""}
       />
     </div>
   );
 };
+
+// Helper to map UI status to Firestore status
+function mapStatusToFirestore(status: string): FirestoreProject["status"] {
+  if (status === "ongoing") return "Ongoing";
+  if (status === "delayed") return "Delayed";
+  if (status === "completed") return "Completed";
+  return "Ongoing";
+}
 
 export default Projects;
