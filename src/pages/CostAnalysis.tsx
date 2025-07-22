@@ -59,11 +59,14 @@ const CostAnalysis = () => {
     { name: "Miscellaneous Cost", value: miscCost, color: "#F59E42" },
   ];
 
-  const monthlyCostData = [
-    { month: "Jan", materials: 150000, engineer: 45000 },
-    { month: "Feb", materials: 200000, engineer: 60000 },
-    { month: "Mar", materials: 100000, engineer: 90000 },
-  ];
+  // Dummy distribution of total working hours across 3 months
+  const engineerHoursDist = [45, 55, 35];
+  const months = ["Jan", "Feb", "Mar"];
+  const monthlyCostData = months.map((month, i) => ({
+    month,
+    engineerHours: engineerHoursDist[i],
+    engineerCost: engineerHoursDist[i] * costPerHour,
+  }));
 
   const budgetVsActualData = [
     {
@@ -327,10 +330,15 @@ const CostAnalysis = () => {
                   <BarChart data={monthlyCostData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
-                    <YAxis tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`} />
-                    <Tooltip formatter={(value) => formatCurrency(value as number)} />
-                    <Bar dataKey="materials" fill="#8B5CF6" name="Materials" />
-                    <Bar dataKey="engineer" fill="#06B6D4" name="Engineer" />
+                    <YAxis yAxisId="left" orientation="left" tickFormatter={(value) => `${value}h`} />
+                    <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`} />
+                    <Tooltip formatter={(value, name) => {
+                      if (name === 'Engineer Cost') return formatCurrency(value as number);
+                      if (name === 'Engineer Hours') return `${value} hrs`;
+                      return value;
+                    }} />
+                    <Bar yAxisId="left" dataKey="engineerHours" fill="#8B5CF6" name="Engineer Hours" barSize={30} />
+                    <Bar yAxisId="right" dataKey="engineerCost" fill="#06B6D4" name="Engineer Cost" barSize={30} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
