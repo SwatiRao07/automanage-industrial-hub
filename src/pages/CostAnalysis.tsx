@@ -264,7 +264,7 @@ const CostAnalysis = () => {
               <CardTitle>Budget & Profitability</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="text-center p-4 bg-muted rounded-lg">
                   <div className="flex items-center justify-center gap-2 mb-2">
                     <span className="text-sm text-muted-foreground">Estimated Budget</span>
@@ -289,12 +289,33 @@ const CostAnalysis = () => {
                       autoFocus
                     />
                   ) : (
-                    <p className="text-xl font-bold">{formatCurrency(estimatedBudget)}</p>
+                    <p className="text-2xl font-bold">{formatCurrency(estimatedBudget)}</p>
                   )}
                 </div>
-                <div className="text-center p-4 bg-muted rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-2">Total Project Cost</p>
-                  <p className="text-xl font-bold">{formatCurrency(totalCost)}</p>
+                {/* Material vs Engineer Card */}
+                <div className="text-center p-4 bg-muted rounded-lg flex flex-col items-center justify-center">
+                  <span className="text-sm text-muted-foreground mb-1">Material vs Engineer</span>
+                  <span className="text-2xl font-bold">
+                    {(() => {
+                      const mat = projectData.bomCost;
+                      const eng = engineerCost;
+                      const misc = miscCost;
+                      const total = mat + eng + misc;
+                      const matPct = total ? Math.round((mat / total) * 100) : 0;
+                      const engPct = total ? Math.round((eng / total) * 100) : 0;
+                      return <>{matPct}% <span className="text-base font-normal">/</span> {engPct}%</>;
+                    })()}
+                  </span>
+                </div>
+                {/* Profit Margin Card */}
+                <div className="text-center p-4 bg-muted rounded-lg flex flex-col items-center justify-center">
+                  <span className="text-sm text-muted-foreground mb-1">Profit Margin</span>
+                  <span className={`text-2xl font-bold ${profitLoss < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {(() => {
+                      const margin = estimatedBudget ? ((profitLoss / estimatedBudget) * 100) : 0;
+                      return `${margin >= 0 ? '' : '-'}${Math.abs(margin).toFixed(1)}%`;
+                    })()}
+                  </span>
                 </div>
                 <div className={`text-center p-4 rounded-lg ${isProfit ? 'bg-green-50' : 'bg-red-50'}`}>
                   <div className="flex items-center justify-center gap-2 mb-2">
@@ -307,7 +328,7 @@ const CostAnalysis = () => {
                       {isProfit ? 'Profit' : 'Loss'}
                     </span>
                   </div>
-                  <p className={`text-xl font-bold ${isProfit ? 'text-green-600' : 'text-red-600'}`}>
+                  <p className={`text-2xl font-bold ${isProfit ? 'text-green-600' : 'text-red-600'}`}>
                     {formatCurrency(Math.abs(profitLoss))}
                   </p>
                 </div>

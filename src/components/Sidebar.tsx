@@ -19,12 +19,9 @@ import { cn } from '@/lib/utils';
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: FolderOpen, label: 'Projects', path: '/projects' },
-  { icon: Package, label: 'Inventory', path: '/inventory' },
-  { icon: ShoppingCart, label: 'Purchase Orders', path: '/purchase-orders' },
   { icon: FileText, label: 'BOMs', path: '/bom' },
   { icon: Clock, label: 'Time Tracking', path: '/time-tracking' },
   { icon: Calculator, label: 'Cost Analysis', path: '/cost-analysis' },
-  { icon: Activity, label: 'Reports', path: '/reports' },
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
