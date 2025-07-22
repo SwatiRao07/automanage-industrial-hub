@@ -5,8 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, TrendingUp, TrendingDown, FileDown, Edit2, DollarSign, Clock, Package } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, ResponsiveContainer, Legend } from "recharts";
+import { Progress } from "@/components/ui/progress";
 import Sidebar from "@/components/Sidebar";
+import ProfitLossGauge from "@/components/ProfitLossGauge";
 
 const CostAnalysis = () => {
   const navigate = useNavigate();
@@ -14,6 +16,8 @@ const CostAnalysis = () => {
   const [estimatedBudget, setEstimatedBudget] = useState(600000);
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [isEditingRate, setIsEditingRate] = useState(false);
+  const [miscCost, setMiscCost] = useState(0);
+  const [isEditingMisc, setIsEditingMisc] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Mock data - in real app, this would come from API
@@ -28,7 +32,7 @@ const CostAnalysis = () => {
   };
 
   const engineerCost = projectData.totalHours * costPerHour;
-  const totalCost = projectData.bomCost + engineerCost;
+  const totalCost = projectData.bomCost + engineerCost + miscCost;
   const profitLoss = estimatedBudget - totalCost;
   const isProfit = profitLoss > 0;
   const budgetUsage = (totalCost / estimatedBudget) * 100;
@@ -50,8 +54,9 @@ const CostAnalysis = () => {
 
   // Chart data
   const costCompositionData = [
-    { name: "BOM Cost", value: projectData.bomCost, color: "#8B5CF6" },
-    { name: "Engineer Cost", value: engineerCost, color: "#06B6D4" },
+    { name: "Material Cost", value: projectData.bomCost, color: "#8B5CF6" },
+    { name: "Engineering Cost", value: engineerCost, color: "#06B6D4" },
+    { name: "Miscellaneous Cost", value: miscCost, color: "#F59E42" },
   ];
 
   const monthlyCostData = [
@@ -61,8 +66,11 @@ const CostAnalysis = () => {
   ];
 
   const budgetVsActualData = [
-    { category: "Materials", estimated: 500000, actual: projectData.bomCost },
-    { category: "Engineer", estimated: 180000, actual: engineerCost },
+    {
+      label: "Budget vs Actual",
+      estimated: estimatedBudget,
+      actual: totalCost,
+    },
   ];
 
   const profitabilityData = [
@@ -75,7 +83,7 @@ const CostAnalysis = () => {
   const costItemsData = [
     { category: "BOM", description: "Material and component costs", cost: projectData.bomCost, notes: "From BOM tab" },
     { category: "Engineer", description: `${projectData.totalHours} hrs @ ₹${costPerHour}/hr`, cost: engineerCost, notes: "Auto-calculated" },
-    { category: "Miscellaneous", description: "Transport, overhead", cost: 25000, notes: "Manually added" },
+    { category: "Miscellaneous", description: "Transport, overhead", cost: miscCost, notes: "Manually added" },
   ];
 
   const statusBadge = getStatusBadge();
@@ -183,6 +191,33 @@ const CostAnalysis = () => {
                     </div>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-sm font-medium">Miscellaneous Cost</span>
+                    <div className="flex items-center gap-2">
+                      {isEditingMisc ? (
+                        <Input
+                          type="number"
+                          value={miscCost}
+                          onChange={(e) => setMiscCost(parseInt(e.target.value) || 0)}
+                          onBlur={() => setIsEditingMisc(false)}
+                          className="w-24 h-8"
+                          autoFocus
+                        />
+                      ) : (
+                        <>
+                          <span className="font-semibold">{formatCurrency(miscCost)}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setIsEditingMisc(true)}
+                            className="h-6 w-6 p-0"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-sm font-medium">Engineering Cost</span>
                     <span className="font-semibold">{formatCurrency(engineerCost)}</span>
                   </div>
@@ -190,7 +225,7 @@ const CostAnalysis = () => {
                 <div className="bg-muted p-6 rounded-lg text-center">
                   <p className="text-sm text-muted-foreground mb-2">Total Project Cost</p>
                   <p className="text-3xl font-bold text-primary">{formatCurrency(totalCost)}</p>
-                  <p className="text-xs text-muted-foreground mt-2">BOM + Engineer</p>
+                  <p className="text-xs text-muted-foreground mt-2">BOM + Engineer + Misc</p>
                 </div>
               </div>
             </CardContent>
@@ -267,7 +302,8 @@ const CostAnalysis = () => {
                       data={costCompositionData}
                       cx="50%"
                       cy="50%"
-                      outerRadius={80}
+                      innerRadius={60}
+                      outerRadius={90}
                       dataKey="value"
                       label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                     >
@@ -309,11 +345,12 @@ const CostAnalysis = () => {
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={budgetVsActualData}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="category" />
-                    <YAxis tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`} />
+                    <XAxis dataKey="label" tick={{ fontWeight: 600 }} />
+                    <YAxis tickFormatter={(value) => value.toLocaleString()} />
                     <Tooltip formatter={(value) => formatCurrency(value as number)} />
-                    <Bar dataKey="estimated" fill="#E5E7EB" name="Estimated" />
-                    <Bar dataKey="actual" fill="#8B5CF6" name="Actual" />
+                    <Bar dataKey="estimated" fill="#22c55e" name="Estimated Budget" barSize={60} />
+                    <Bar dataKey="actual" fill="#ef4444" name="Actual Cost" barSize={60} />
+                    <Legend iconType="rect" wrapperStyle={{ top: 0 }} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -322,24 +359,14 @@ const CostAnalysis = () => {
             {/* Profitability Over Time */}
             <Card>
               <CardHeader>
-                <CardTitle>Profitability Trend</CardTitle>
+                <CardTitle>Profit & Loss Meter</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={profitabilityData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="week" />
-                    <YAxis tickFormatter={(value) => `₹${(value / 1000).toFixed(0)}K`} />
-                    <Tooltip formatter={(value) => formatCurrency(value as number)} />
-                    <Line 
-                      type="monotone" 
-                      dataKey="profit" 
-                      stroke="#10B981" 
-                      strokeWidth={3}
-                      name="Profit"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                {(() => {
+                  const percent = (profitLoss / estimatedBudget) * 100;
+                  const isProfitMeter = profitLoss >= 0;
+                  return <ProfitLossGauge percent={percent} isProfit={isProfitMeter} />;
+                })()}
               </CardContent>
             </Card>
           </div>
