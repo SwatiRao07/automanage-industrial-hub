@@ -1,162 +1,74 @@
 import { useRef, useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import {
+  Engineer,
+  Week,
+  TimeEntry,
+  fetchEngineers,
+  fetchWeeks,
+  addTimeEntry,
+  addEngineer,
+  updateEngineer,
+  addWeek
+} from "@/utils/timeTrackingFirestore";
 
-interface TimeEntry {
-  hours: number;
-  description: string;
-}
-
-interface Engineer {
-  name: string;
-  role: string;
-  weeks: {
-    [weekKey: string]: {
-      total: number;
-      entries: TimeEntry[];
-      status?: 'not-updated' | 'future' | 'ok';
-    };
-  };
-}
-
-interface Week {
-  key: string;
-  label: string;
-  dates: string;
-  status: 'past' | 'current' | 'future';
-}
-
-function getNextWeek(startDate: Date, weekCount: number): { label: string; dates: string; status: 'future'; key: string } {
-  const newWeekNum = weekCount + 1;
-  const newWeekKey = `week${newWeekNum}`;
-  const newWeekStart = new Date(startDate);
-  newWeekStart.setDate(startDate.getDate() + (newWeekNum - 1) * 7);
-  const newWeekEnd = new Date(newWeekStart);
-  newWeekEnd.setDate(newWeekStart.getDate() + 6);
-  const startStr = newWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const endStr = newWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return {
-    key: newWeekKey,
-    label: `Week ${newWeekNum}`,
-    dates: `${startStr}-${endStr}`,
-    status: 'future',
-  };
-}
-
-function getCurrentWeekIndex(startDate: Date, weeks: Week[]): number {
-  const today = new Date();
-  const diffDays = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-  const weekIdx = Math.floor(diffDays / 7);
-  return Math.max(0, Math.min(weekIdx, weeks.length - 1));
-}
-
-function getWeekLabelAndDates(startDate: Date, weekIdx: number): { label: string; dates: string; key: string } {
-  const newWeekKey = `week${weekIdx + 1}`;
-  const newWeekStart = new Date(startDate);
-  newWeekStart.setDate(startDate.getDate() + weekIdx * 7);
-  const newWeekEnd = new Date(newWeekStart);
-  newWeekEnd.setDate(newWeekStart.getDate() + 6);
-  const startStr = newWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const endStr = newWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return {
-    key: newWeekKey,
-    label: `Week ${weekIdx + 1}`,
-    dates: `${startStr}-${endStr}`,
-  };
-}
-
-const initialWeeks: Week[] = [
-  { key: "week1", label: "Week 1", dates: "Jul 1-7", status: "past" },
-  { key: "week2", label: "Week 2", dates: "Jul 8-14", status: "past" },
-  { key: "week3", label: "Week 3", dates: "Jul 15-21", status: "current" },
-  { key: "week4", label: "Week 4", dates: "Jul 22-28", status: "future" },
-  { key: "week5", label: "Week 5", dates: "Jul 29-Aug 4", status: "future" },
-  { key: "week6", label: "Week 6", dates: "Aug 5-11", status: "future" },
-];
-
-const initialEngineers: Engineer[] = [
-  {
-    name: "Sarah Johnson",
-    role: "Frontend Developer",
-    weeks: {
-      week1: { total: 32, entries: [{ hours: 32, description: "UI work" }] },
-      week2: { total: 28, entries: [{ hours: 28, description: "" }] }, // No note
-      week3: { total: 0, entries: [], status: 'not-updated' },
-      week4: { total: 0, entries: [], status: 'future' },
-      week5: { total: 0, entries: [], status: 'future' },
-      week6: { total: 0, entries: [], status: 'future' },
-    },
-  },
-  {
-    name: "Mike Chen",
-    role: "Backend Developer",
-    weeks: {
-      week1: { total: 25, entries: [{ hours: 25, description: "API work" }] },
-      week2: { total: 30, entries: [{ hours: 30, description: "" }] }, // No note
-      week3: { total: 35, entries: [{ hours: 35, description: "" }] }, // No note property
-      week4: { total: 0, entries: [], status: 'future' },
-      week5: { total: 0, entries: [], status: 'future' },
-      week6: { total: 0, entries: [], status: 'future' },
-    },
-  },
-  {
-    name: "Emma Davis",
-    role: "UI/UX Designer",
-    weeks: {
-      week1: { total: 20, entries: [{ hours: 20, description: "Wireframes" }] },
-      week2: { total: 15, entries: [{ hours: 15, description: "" }] }, // No note property
-      week3: { total: 0, entries: [], status: 'not-updated' },
-      week4: { total: 0, entries: [], status: 'future' },
-      week5: { total: 0, entries: [], status: 'future' },
-      week6: { total: 0, entries: [], status: 'future' },
-    },
-  },
-  {
-    name: "Alex Rodriguez",
-    role: "Project Manager",
-    weeks: {
-      week1: { total: 15, entries: [{ hours: 15, description: "Planning" }] },
-      week2: { total: 18, entries: [{ hours: 18, description: "" }] }, // No note
-      week3: { total: 20, entries: [{ hours: 20, description: "Reporting" }] },
-      week4: { total: 0, entries: [], status: 'future' },
-      week5: { total: 0, entries: [], status: 'future' },
-      week6: { total: 0, entries: [], status: 'future' },
-    },
-  },
-  {
-    name: "You",
-    role: "Developer",
-    weeks: {
-      week1: { total: 8, entries: [ { hours: 4, description: "Frontend development - login page" }, { hours: 4, description: "" } ] }, // One with, one without note
-      week2: { total: 12, entries: [ { hours: 12, description: "" } ] }, // No note
-      week3: { total: 15, entries: [ { hours: 6, description: "UI components development" }, { hours: 5, description: "" }, { hours: 4, description: "" } ] }, // Mixed
-      week4: { total: 0, entries: [], status: 'future' },
-      week5: { total: 0, entries: [], status: 'future' },
-      week6: { total: 0, entries: [], status: 'future' },
-    },
-  },
-];
-
-const projectStartDate = new Date(2025, 6, 1); // July 1, 2025
 const departments = ["Engineer", "Data Science", "Full Stack", "Sales"];
 
 const TimeEntryTab = () => {
-  const [weeks, setWeeks] = useState<Week[]>(initialWeeks);
-  const [engineers, setEngineers] = useState<Engineer[]>(initialEngineers);
-  const [selectedWeek, setSelectedWeek] = useState<string>(weeks[2].key); // Default to current week
+  const [weeks, setWeeks] = useState<Week[]>([]);
+  const [engineers, setEngineers] = useState<(Engineer & { id: string })[]>([]);
+  const [selectedWeek, setSelectedWeek] = useState<string>("");
   const [showModal, setShowModal] = useState(false);
-  const [modalWeek, setModalWeek] = useState<string>(weeks[2].key);
+  const [modalWeek, setModalWeek] = useState<string>("");
   const [modalHours, setModalHours] = useState<number | ''>('');
   const [modalDesc, setModalDesc] = useState('');
-  const [modalEmployee, setModalEmployee] = useState<string>('You');
+  const [modalEmployee, setModalEmployee] = useState<string>('');
   const [showAddEmployee, setShowAddEmployee] = useState(false);
   const [newEmpName, setNewEmpName] = useState('');
   const [newEmpDept, setNewEmpDept] = useState(departments[0]);
   const [newEmpRole, setNewEmpRole] = useState('');
-  const [notesPanel, setNotesPanel] = useState<{ employee: string; week: string } | null>(null);
+  const [notesPanel, setNotesPanel] = useState<{ employeeId: string; week: string } | null>(null);
   const weeksSectionRef = useRef<HTMLDivElement>(null);
   const [editingEmp, setEditingEmp] = useState<string | null>(null);
   const [editingEmpName, setEditingEmpName] = useState('');
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get('project');
+
+  // Fetch initial data
+  useEffect(() => {
+    const loadData = async () => {
+      if (!projectId) return;
+      
+      try {
+        const [fetchedEngineers, fetchedWeeks] = await Promise.all([
+          fetchEngineers(projectId),
+          fetchWeeks(projectId)
+        ]);
+        
+        setEngineers(fetchedEngineers);
+        setWeeks(fetchedWeeks);
+        
+        // Set default selected week to current week
+        const currentWeek = fetchedWeeks.find(w => w.status === 'current');
+        if (currentWeek) {
+          setSelectedWeek(currentWeek.key);
+          setModalWeek(currentWeek.key);
+        }
+
+        // Set default modal employee if engineers exist
+        if (fetchedEngineers.length > 0) {
+          setModalEmployee(fetchedEngineers[0].id);
+        }
+      } catch (error) {
+        console.error('Error loading time tracking data:', error);
+        // TODO: Show error toast
+      }
+    };
+
+    loadData();
+  }, [projectId]);
 
   // Project total hours
   const getTotalHours = () => {
@@ -164,90 +76,161 @@ const TimeEntryTab = () => {
   };
 
   // Add new week logic
-  const handleAddWeek = () => {
-    const newWeek = getNextWeek(projectStartDate, weeks.length);
-    setWeeks((prev) => [...prev, newWeek]);
-    setEngineers((prev) =>
-      prev.map((eng) => ({
-        ...eng,
-        weeks: {
-          ...eng.weeks,
-          [newWeek.key]: { total: 0, entries: [], status: 'future' },
-        },
-      }))
-    );
-    setModalWeek(newWeek.key);
+  const handleAddWeek = async () => {
+    if (!projectId) return;
+
+    const lastWeek = weeks[weeks.length - 1];
+    const newWeekStart = new Date(lastWeek.endDate);
+    newWeekStart.setDate(newWeekStart.getDate() + 1);
+    const newWeekEnd = new Date(newWeekStart);
+    newWeekEnd.setDate(newWeekStart.getDate() + 6);
+
+    const weekNum = weeks.length + 1;
+    const newWeek: Week = {
+      key: `week${weekNum}`,
+      label: `Week ${weekNum}`,
+      dates: `${newWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}-${newWeekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      status: 'future',
+      startDate: newWeekStart,
+      endDate: newWeekEnd
+    };
+
+    try {
+      await addWeek(projectId, newWeek);
+      setWeeks(prev => [...prev, newWeek]);
+      setModalWeek(newWeek.key);
+    } catch (error) {
+      console.error('Error adding new week:', error);
+      // TODO: Show error toast
+    }
   };
 
   // Add new employee logic
-  const handleAddEmployee = () => {
-    if (!newEmpName || !newEmpDept || !newEmpRole) return;
-    setEngineers(prev => [
-      ...prev,
-      {
+  const handleAddEmployee = async () => {
+    if (!projectId || !newEmpName || !newEmpDept || !newEmpRole) return;
+
+    try {
+      const newEngineer = await addEngineer(projectId, {
         name: newEmpName,
         role: newEmpRole,
-        weeks: weeks.reduce((acc, w) => {
-          acc[w.key] = { total: 0, entries: [], status: w.status === 'future' ? 'future' : undefined };
-          return acc;
-        }, {} as Engineer['weeks'])
-      }
-    ]);
-    setModalEmployee(newEmpName);
-    setShowAddEmployee(false);
-    setNewEmpName('');
-    setNewEmpDept(departments[0]);
-    setNewEmpRole('');
+        department: newEmpDept
+      });
+
+      setEngineers(prev => [...prev, newEngineer]);
+      setModalEmployee(newEngineer.id);
+      setShowAddEmployee(false);
+      setNewEmpName('');
+      setNewEmpDept(departments[0]);
+      setNewEmpRole('');
+    } catch (error) {
+      console.error('Error adding new employee:', error);
+      // TODO: Show error toast
+    }
   };
 
   // Modal logic
   const openModal = () => {
-    setModalWeek(currentWeekKey);
+    const currentWeek = weeks.find(w => w.status === 'current');
+    if (currentWeek) {
+      setModalWeek(currentWeek.key);
+    }
     setModalHours('');
     setModalDesc('');
     setShowModal(true);
   };
+
   const closeModal = () => setShowModal(false);
 
-  const handleModalSubmit = (e: React.FormEvent) => {
+  const handleModalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!modalWeek || !modalHours || modalHours <= 0 || !modalEmployee) return;
-    if (modalWeek === 'addNewWeek') {
-      handleAddWeek();
+    console.log('Form submitted', { modalWeek, modalHours, modalDesc, modalEmployee });
+
+    if (!projectId) {
+      console.error('No project ID provided');
       return;
     }
-    setEngineers(prev => prev.map(eng => {
-      if (eng.name !== modalEmployee) return eng;
-      const weekData = eng.weeks[modalWeek] || { total: 0, entries: [], status: undefined };
-      const newEntry = { hours: Number(modalHours), description: modalDesc || 'No description provided' };
-      return {
-        ...eng,
-        weeks: {
-          ...eng.weeks,
-          [modalWeek]: {
-            ...weekData,
-            total: (weekData.total || 0) + Number(modalHours),
-            entries: [...(weekData.entries || []), newEntry],
-            status: weekData.status === 'future' ? undefined : weekData.status,
-          }
-        }
+
+    if (!modalWeek) {
+      console.error('No week selected');
+      return;
+    }
+
+    if (!modalHours || modalHours <= 0) {
+      console.error('Invalid hours');
+      return;
+    }
+
+    if (!modalEmployee) {
+      console.error('No employee selected');
+      return;
+    }
+
+    try {
+      if (modalWeek === 'addNewWeek') {
+        await handleAddWeek();
+        return;
+      }
+
+      const engineer = engineers.find(e => e.id === modalEmployee);
+      if (!engineer) {
+        console.error('Engineer not found:', modalEmployee);
+        return;
+      }
+
+      console.log('Adding time entry for', engineer.name);
+
+      const entry = {
+        hours: Number(modalHours),
+        description: modalDesc || 'No description provided'
       };
-    }));
-    setShowModal(false);
+
+      const updatedWeekData = await addTimeEntry(projectId, engineer.id, modalWeek, entry);
+      console.log('Time entry added successfully', updatedWeekData);
+
+      // Update local state
+      setEngineers(prev => prev.map(eng => {
+        if (eng.id !== modalEmployee) return eng;
+        return {
+          ...eng,
+          weeks: {
+            ...eng.weeks,
+            [modalWeek]: updatedWeekData
+          }
+        };
+      }));
+
+      // Reset form and close modal
+      setModalHours('');
+      setModalDesc('');
+      setShowModal(false);
+    } catch (error) {
+      console.error('Error adding time entry:', error);
+      // TODO: Show error toast
+    }
   };
 
   // Inline employee name editing
-  const handleEditEmp = (name: string) => {
-    setEditingEmp(name);
-    setEditingEmpName(name);
+  const handleEditEmp = (id: string) => {
+    setEditingEmp(id);
+    setEditingEmpName(engineers.find(e => e.id === id)?.name || '');
   };
-  const handleSaveEmp = (oldName: string) => {
-    setEngineers(prev => prev.map(emp =>
-      emp.name === oldName ? { ...emp, name: editingEmpName } : emp
-    ));
-    setModalEmployee(editingEmpName === '' ? oldName : editingEmpName);
-    setEditingEmp(null);
-    setEditingEmpName('');
+
+  const handleSaveEmp = async (oldId: string) => {
+    if (!projectId) return;
+
+    try {
+      await updateEngineer(projectId, oldId, { name: editingEmpName });
+
+      setEngineers(prev => prev.map(emp =>
+        emp.id === oldId ? { ...emp, name: editingEmpName } : emp
+      ));
+      setModalEmployee(editingEmpName === '' ? oldId : editingEmpName);
+      setEditingEmp(null);
+      setEditingEmpName('');
+    } catch (error) {
+      console.error('Error updating engineer name:', error);
+      // TODO: Show error toast
+    }
   };
 
   // Scroll controls
@@ -262,62 +245,20 @@ const TimeEntryTab = () => {
     }
   };
 
-  // Dynamically determine current week
-  const currentWeekIdx = getCurrentWeekIndex(projectStartDate, weeks);
-  const { key: currentWeekKey, label: currentWeekLabel, dates: currentWeekDates } = getWeekLabelAndDates(projectStartDate, currentWeekIdx);
-
-  // Ensure current week is present and update week statuses
-  useEffect(() => {
-    let updated = false;
-    let newWeeks = weeks;
-    // Ensure current week is present
-    if (!weeks.some(w => w.key === currentWeekKey)) {
-      newWeeks = [
-        ...weeks,
-        {
-          key: currentWeekKey,
-          label: currentWeekLabel,
-          dates: currentWeekDates,
-          status: 'current',
-        },
-      ];
-      setEngineers(prev => prev.map(eng => ({
-        ...eng,
-        weeks: {
-          ...eng.weeks,
-          [currentWeekKey]: { total: 0, entries: [], status: undefined },
-        },
-      })));
-      updated = true;
-    }
-    // Update week statuses
-    const today = new Date();
-    newWeeks = newWeeks.map((w, idx) => {
-      const weekStart = new Date(projectStartDate);
-      weekStart.setDate(projectStartDate.getDate() + idx * 7);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 6);
-      let status: 'past' | 'current' | 'future';
-      if (today >= weekStart && today <= weekEnd) {
-        status = 'current';
-      } else if (today < weekStart) {
-        status = 'future';
-      } else {
-        status = 'past';
-      }
-      if (w.status !== status) updated = true;
-      return { ...w, status };
-    });
-    if (updated) setWeeks(newWeeks);
-  }, [weeks, currentWeekKey, currentWeekLabel, currentWeekDates]);
-
   // Always show current week in table
   const visibleWeeks = weeks.filter(week =>
-    week.key === currentWeekKey || engineers.some(eng => eng.weeks[week.key]?.total > 0)
+    week.status === 'current' || engineers.some(eng => eng.weeks[week.key]?.total > 0)
   );
 
   // Pending updates for current week
-  const pendingUpdates = engineers.filter(eng => (eng.weeks[currentWeekKey]?.total || 0) === 0).length;
+  const currentWeek = weeks.find(w => w.status === 'current');
+  const pendingUpdates = currentWeek
+    ? engineers.filter(eng => (eng.weeks[currentWeek.key]?.total || 0) === 0).length
+    : 0;
+
+  if (!projectId) {
+    return <div className="p-6 text-center text-gray-500">No project selected</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -348,20 +289,26 @@ const TimeEntryTab = () => {
               <h2 className="text-2xl font-bold mb-1 text-gray-800">Add Your Hours</h2>
               <p className="text-gray-500">Log time spent on ABC OCR Project</p>
             </div>
-            <form onSubmit={handleModalSubmit}>
+            <form onSubmit={handleModalSubmit} className="space-y-4">
               <div className="mb-4">
                 <label className="block mb-2 font-semibold text-gray-700">Select Employee:</label>
                 <select
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400"
                   value={modalEmployee}
                   onChange={e => {
-                    if (e.target.value === 'addNewEmployee') setShowAddEmployee(true);
-                    setModalEmployee(e.target.value);
+                    if (e.target.value === 'addNewEmployee') {
+                      setShowAddEmployee(true);
+                      // Don't update modalEmployee when selecting "Add New Employee"
+                    } else {
+                      setModalEmployee(e.target.value);
+                      setShowAddEmployee(false);
+                    }
                   }}
                   required
                 >
+                  <option value="">Select an employee...</option>
                   {engineers.map(emp => (
-                    <option key={emp.name} value={emp.name}>{emp.name}</option>
+                    <option key={emp.id} value={emp.id}>{emp.name}</option>
                   ))}
                   <option value="addNewEmployee">➕ Add New Employee</option>
                 </select>
@@ -382,7 +329,17 @@ const TimeEntryTab = () => {
                     <label className="block mb-1 font-semibold text-gray-700">Position/Role:</label>
                     <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2" value={newEmpRole} onChange={e => setNewEmpRole(e.target.value)} required />
                   </div>
-                  <Button type="button" className="mt-2 bg-gradient-to-r from-green-500 to-green-700 text-white font-semibold" onClick={handleAddEmployee}>Add Employee</Button>
+                  <Button 
+                    type="button" 
+                    className="mt-2 bg-gradient-to-r from-green-500 to-green-700 text-white font-semibold w-full" 
+                    onClick={async () => {
+                      await handleAddEmployee();
+                      // After adding employee, close the add employee form
+                      setShowAddEmployee(false);
+                    }}
+                  >
+                    Add Employee
+                  </Button>
                 </div>
               )}
               <div className="mb-4">
@@ -428,8 +385,15 @@ const TimeEntryTab = () => {
                 />
               </div>
               <div className="flex gap-4 justify-center mt-6">
-                <Button type="button" variant="outline" className="px-6" onClick={closeModal}>Cancel</Button>
-                <Button type="submit" className="px-6 bg-gradient-to-r from-green-500 to-green-700 text-white font-semibold">Add Hours</Button>
+                <Button type="button" variant="outline" className="px-6" onClick={closeModal}>
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="px-6 bg-gradient-to-r from-green-500 to-green-700 text-white font-semibold"
+                >
+                  Add Hours
+                </Button>
               </div>
             </form>
           </div>
@@ -438,16 +402,16 @@ const TimeEntryTab = () => {
 
       {/* Notes Panel */}
       {notesPanel && (() => {
-        const emp = engineers.find(e => e.name === notesPanel.employee);
-        const week = notesPanel.week;
-        const weekData = emp?.weeks[week];
+        const engineer = engineers.find(e => e.id === notesPanel.employeeId);
+        const week = weeks.find(w => w.key === notesPanel.week);
+        const weekData = engineer?.weeks[notesPanel.week];
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
             <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md relative animate-fadeIn">
               <button className="absolute top-3 right-4 text-2xl text-gray-400 hover:text-red-500" onClick={() => setNotesPanel(null)}>&times;</button>
               <div className="mb-6 text-center">
                 <h2 className="text-2xl font-bold mb-1 text-gray-800">Time Entry Notes</h2>
-                <p className="text-gray-500">{emp?.name} - {weeks.find(w => w.key === week)?.label}</p>
+                <p className="text-gray-500">{engineer?.name} - {week?.label}</p>
               </div>
               <div className="space-y-4">
                 {weekData?.entries?.length ? weekData.entries.map((entry, idx) => (
@@ -476,25 +440,25 @@ const TimeEntryTab = () => {
                 </tr>
               </thead>
               <tbody>
-                {engineers.map((eng, idx) => (
-                  <tr key={eng.name} style={{ height: 80 }} className="border-b border-blue-100">
+                {engineers.map((eng) => (
+                  <tr key={eng.id} style={{ height: 80 }} className="border-b border-blue-100">
                     <td className="py-4 px-4">
-                      {editingEmp === eng.name ? (
+                      {editingEmp === eng.id ? (
                         <div className="flex items-center gap-2">
                           <input
                             className="border rounded px-2 py-1 text-base"
                             value={editingEmpName}
                             onChange={e => setEditingEmpName(e.target.value)}
-                            onBlur={() => handleSaveEmp(eng.name)}
-                            onKeyDown={e => { if (e.key === 'Enter') handleSaveEmp(eng.name); }}
+                            onBlur={() => handleSaveEmp(eng.id)}
+                            onKeyDown={e => { if (e.key === 'Enter') handleSaveEmp(eng.id); }}
                             autoFocus
                           />
-                          <button className="text-green-600 font-bold" onClick={() => handleSaveEmp(eng.name)} title="Save">✔️</button>
+                          <button className="text-green-600 font-bold" onClick={() => handleSaveEmp(eng.id)} title="Save">✔️</button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-gray-900 text-base">{eng.name}</span>
-                          <button className="text-blue-500 hover:text-blue-700" onClick={() => handleEditEmp(eng.name)} title="Edit Name">✏️</button>
+                          <button className="text-blue-500 hover:text-blue-700" onClick={() => handleEditEmp(eng.id)} title="Edit Name">✏️</button>
                         </div>
                       )}
                       <div className="text-sm text-gray-500 mt-1">{eng.role}</div>
@@ -530,7 +494,7 @@ const TimeEntryTab = () => {
               </thead>
               <tbody>
                 {engineers.map((eng, rowIdx) => (
-                  <tr key={eng.name} style={{ height: 80 }} className="border-b border-blue-100">
+                  <tr key={eng.id} style={{ height: 80 }} className="border-b border-blue-100">
                     {visibleWeeks.map((week, colIdx) => {
                       const weekData = eng.weeks[week.key];
                       if (weekData.status === 'future') {
@@ -543,7 +507,7 @@ const TimeEntryTab = () => {
                         <td
                           key={week.key}
                           className="hours-cell text-center font-semibold text-gray-800 cursor-pointer hover:bg-blue-50"
-                          onClick={() => setNotesPanel({ employee: eng.name, week: week.key })}
+                          onClick={() => setNotesPanel({ employeeId: eng.id, week: week.key })}
                         >
                           <span className="inline-flex items-center justify-center w-8 h-8 rounded-full border-2 border-blue-400">
                             {weekData.total}
@@ -570,7 +534,7 @@ const TimeEntryTab = () => {
               </thead>
               <tbody>
                 {engineers.map((eng) => (
-                  <tr key={eng.name} style={{ height: 80 }} className="border-b border-blue-100">
+                  <tr key={eng.id} style={{ height: 80 }} className="border-b border-blue-100">
                     <td>
                       <div className="total-hours bg-blue-500 text-white rounded-lg px-4 py-2 font-bold text-center shadow">
                         {Object.values(eng.weeks).reduce((sum, w) => sum + w.total, 0)}
