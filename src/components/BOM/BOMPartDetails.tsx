@@ -9,6 +9,11 @@ import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { useToast } from '@/components/ui/use-toast';
 
+interface DocumentInfo {
+  name: string;
+  url: string;
+}
+
 interface BOMItem {
   id: string;
   name: string;
@@ -26,7 +31,7 @@ interface BOMItem {
   expectedDelivery?: string;
   poNumber?: string;
   descriptionKV?: Array<{ key: string; value: string }>;
-  documents?: string[];
+  documents?: DocumentInfo[];
 }
 
 interface BOMPartDetailsProps {
@@ -127,8 +132,8 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
   const [docDeleteMode, setDocDeleteMode] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<string[]>([]);
   // Combine part-level and all vendor documents for the Documents section
-  const documents = partState?.documents || [];
-  const setDocuments = (docs: string[]) => {
+  const documents: DocumentInfo[] = partState?.documents || [];
+  const setDocuments = (docs: DocumentInfo[]) => {
     setPartState(prev => prev ? { ...prev, documents: docs } : prev);
     if (typeof onUpdatePart === 'function' && partState) {
       onUpdatePart({ ...partState, documents: docs });
@@ -138,7 +143,14 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
   // Handle file upload for this part
   const handleUploadDocs = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const newDocs = [...documents, ...Array.from(e.target.files).map(f => f.name)];
+      // Simulate upload and URL creation
+      const newDocs: DocumentInfo[] = [
+        ...documents,
+        ...Array.from(e.target.files).map(f => ({
+          name: f.name,
+          url: URL.createObjectURL(f) // In real app, use storage URL
+        }))
+      ];
       setDocuments(newDocs);
       toast({ title: 'Upload Successful', description: `${e.target.files.length} document(s) uploaded.` });
     }
@@ -166,7 +178,7 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
   };
 
   // Add state for Add Vendor documents
-  const [addVendorDocs, setAddVendorDocs] = useState<string[]>([]);
+  const [addVendorDocs, setAddVendorDocs] = useState<DocumentInfo[]>([]);
 
   const handleAddVendor = () => {
     if (!vendorName.trim()) return;
@@ -189,14 +201,14 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
   };
 
   // In handleEditVendorOpen, also set a local state for vendor documents
-  const [editVendorDocs, setEditVendorDocs] = useState<string[]>([]);
+  const [editVendorDocs, setEditVendorDocs] = useState<DocumentInfo[]>([]);
   const handleEditVendorOpen = (idx: number) => {
     setEditVendorIdx(idx);
     const v = vendors[idx];
     setEditVendorName(v.name || '');
     setEditPan('price' in v ? v.price : '');
     setEditGst('leadTime' in v ? v.leadTime : '');
-    setEditVendorDocs(v.documents || []);
+    setEditVendorDocs(Array.isArray(v.documents) ? v.documents : []);
   };
   // Add state for confirming vendor doc deletion
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
@@ -204,17 +216,17 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
     if (editVendorIdx === undefined) return;
     // Find docs that were removed from this vendor
     const prevDocs = vendors[editVendorIdx]?.documents || [];
-    const removedDocs = prevDocs.filter(doc => !editVendorDocs.includes(doc));
+    const removedDocs = prevDocs.filter(doc => !editVendorDocs.some(d => d.name === doc.name));
     // For each removed doc, check if it exists in any other vendor or in partState.documents
     let updatedPartDocs = partState?.documents || [];
     removedDocs.forEach(doc => {
-      const inOtherVendor = vendors.some((v, i) => i !== editVendorIdx && v.documents && v.documents.includes(doc));
-      if (!inOtherVendor && updatedPartDocs.includes(doc)) {
-        updatedPartDocs = updatedPartDocs.filter(d => d !== doc);
+      const inOtherVendor = vendors.some((v, i) => i !== editVendorIdx && v.documents && v.documents.some(d => d.name === doc.name));
+      if (!inOtherVendor && updatedPartDocs.some(d => d.name === doc.name)) {
+        updatedPartDocs = updatedPartDocs.filter(d => d.name !== doc.name);
       }
     });
     // Save vendors and update part documents if changed
-    updateVendors(vendors.map((v, i) => i === editVendorIdx ? { ...v, name: editVendorName, price: Number(editPan), leadTime: editGst, documents: editVendorDocs } : v));
+    updateVendors(vendors.map((v, i) => i === editVendorIdx ? { ...v, name: editVendorName, price: Number(editPan), leadTime: editGst, documents: editVendorDocs.map(d => ({ name: d.name, url: d.url })) } : v));
     if (updatedPartDocs !== (partState?.documents || [])) {
       setPartState(prev => prev ? { ...prev, documents: updatedPartDocs } : prev);
       if (typeof onUpdatePart === 'function' && partState) {
@@ -421,20 +433,28 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                   <div className="text-gray-400 text-sm italic flex items-center gap-2 p-2"><FileText size={16} />No documents uploaded yet.</div>
                 )}
                 {documents.map(doc => (
-                  <div key={doc} className="flex items-center gap-2 bg-gray-50 rounded px-2 py-1 border border-gray-200">
+                  <div key={doc.url} className="flex items-center gap-2 bg-gray-50 rounded px-2 py-1 border border-gray-200">
                     {docDeleteMode && (
                       <input
                         type="checkbox"
-                        checked={selectedDocs.includes(doc)}
+                        checked={selectedDocs.includes(doc.name)}
                         onChange={e => setSelectedDocs(prev =>
                           e.target.checked
-                            ? [...prev, doc]
-                            : prev.filter(d => d !== doc)
+                            ? [...prev, doc.name]
+                            : prev.filter(d => d !== doc.name)
                         )}
                       />
                     )}
                     <FileText size={16} className="text-blue-600 mr-1" />
-                    <span className="flex-1 text-left text-gray-800 text-sm truncate" title={doc}>{doc}</span>
+                    <a
+                      href={doc.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 text-left text-blue-700 text-sm truncate hover:underline"
+                      title={doc.name}
+                    >
+                      {doc.name}
+                    </a>
                   </div>
                 ))}
                 {docDeleteMode && (
@@ -444,7 +464,7 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                     className="mt-2"
                     disabled={selectedDocs.length === 0}
                     onClick={() => {
-                      setDocuments(documents.filter(doc => !selectedDocs.includes(doc)));
+                      setDocuments(documents.filter(doc => !selectedDocs.includes(doc.name)));
                       setSelectedDocs([]);
                       setDocDeleteMode(false);
                     }}
@@ -533,7 +553,17 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                       {Array.isArray(vendor.documents) && vendor.documents.length > 0 ? (
                         <ul className="max-h-24 overflow-y-auto text-xs">
                           {vendor.documents.map((doc, idx) => (
-                            <li key={idx} className="flex items-center gap-2 text-gray-800"><FileText size={14} className="text-blue-600" />{doc}</li>
+                            <li key={idx} className="flex items-center gap-2 text-gray-800">
+                              <FileText size={14} className="text-blue-600" />
+                              <a
+                                href={doc.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline"
+                              >
+                                {doc.name}
+                              </a>
+                            </li>
                           ))}
                         </ul>
                       ) : (
@@ -584,11 +614,11 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                     <ul className="border rounded p-2 bg-gray-50 max-h-24 overflow-y-auto text-xs">
                       {editVendorDocs.map((doc, idx) => (
                         <li key={idx} className="flex items-center gap-2 text-gray-800">
-                          <FileText size={14} className="text-blue-600" />{doc}
+                          <FileText size={14} className="text-blue-600" />{doc.name}
                           <button
                             className="ml-auto text-red-500 hover:text-red-700 text-xs px-2"
                             title="Delete document"
-                            onClick={e => { e.preventDefault(); setDocToDelete(doc); }}
+                            onClick={e => { e.preventDefault(); setDocToDelete(doc.name); }}
                           >×</button>
                         </li>
                       ))}
@@ -599,7 +629,13 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                   <label className="cursor-pointer mt-2 inline-block">
                     <input type="file" multiple className="hidden" onChange={e => {
                       if (e.target.files) {
-                        setEditVendorDocs([...editVendorDocs, ...Array.from(e.target.files).map(f => f.name)]);
+                        setEditVendorDocs(prev => [
+                          ...prev,
+                          ...Array.from(e.target.files).map(f => ({
+                            name: f.name,
+                            url: URL.createObjectURL(f)
+                          }))
+                        ]);
                       }
                     }} />
                     <span className="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Add Documents</span>
@@ -633,7 +669,7 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                       <div className="mb-4 text-gray-800">Are you sure you want to delete this document from this vendor?</div>
                       <div className="flex justify-center gap-4">
                         <button className="px-4 py-1 bg-red-600 text-white rounded" onClick={() => {
-                          setEditVendorDocs(editVendorDocs.filter(d => d !== docToDelete));
+                          setEditVendorDocs(editVendorDocs.filter(d => d.name !== docToDelete));
                           setDocToDelete(null);
                         }}>Yes</button>
                         <button className="px-4 py-1 bg-gray-200 text-gray-700 rounded" onClick={() => setDocToDelete(null)}>No</button>
@@ -673,7 +709,13 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                 <label className="cursor-pointer">
                   <input type="file" multiple className="hidden" onChange={e => {
                     if (e.target.files) {
-                      setAddVendorDocs(prev => [...prev, ...Array.from(e.target.files).map(f => f.name)]);
+                      setAddVendorDocs(prev => [
+                        ...prev,
+                        ...Array.from(e.target.files).map(f => ({
+                          name: f.name,
+                          url: URL.createObjectURL(f)
+                        }))
+                      ]);
                     }
                   }} />
                   <span className="px-4 py-2 bg-gray-200 text-gray-700 rounded ml-2 inline-block hover:bg-gray-300">Add Documents</span>
@@ -686,7 +728,7 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                   <div className="text-xs font-semibold mb-1 text-gray-700">Uploaded Documents:</div>
                   <ul className="border rounded p-2 bg-gray-50 max-h-24 overflow-y-auto text-xs">
                     {addVendorDocs.map((doc, idx) => (
-                      <li key={idx} className="flex items-center gap-2 text-gray-800"><FileText size={14} className="text-blue-600" />{doc}</li>
+                      <li key={idx} className="flex items-center gap-2 text-gray-800"><FileText size={14} className="text-blue-600" />{doc.name}</li>
                     ))}
                   </ul>
           </div>

@@ -19,9 +19,10 @@ import {
   updateBOMData, 
   updateBOMItem, 
   deleteBOMItem,
-  type BOMItem,
-  type BOMCategory 
 } from '@/utils/projectFirestore';
+import { BOMItem, BOMCategory, BOMStatus } from '@/types/bom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/firebase';
 
 const BOM = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -67,13 +68,29 @@ const BOM = () => {
 
   // Load project details
   useEffect(() => {
-    if (!projectId) return;
-    
-    setProjectDetails({
-      projectName: 'Vision System Alpha',
-      projectId: 'PRJ-2024-001',
-      clientName: 'Manufacturing Corp',
-    });
+    const loadProjectDetails = async () => {
+      if (!projectId) return;
+      
+      try {
+        const projectRef = doc(db, 'projects', projectId);
+        const projectSnap = await getDoc(projectRef);
+        
+        if (projectSnap.exists()) {
+          const projectData = projectSnap.data() as { projectName: string; projectId: string; clientName: string };
+          setProjectDetails({
+            projectName: projectData.projectName,
+            projectId: projectData.projectId,
+            clientName: projectData.clientName,
+          });
+        } else {
+          console.error('Project not found');
+        }
+      } catch (error) {
+        console.error('Error loading project details:', error);
+      }
+    };
+
+    loadProjectDetails();
   }, [projectId]);
 
   const toggleCategory = async (categoryName: string) => {
@@ -241,6 +258,24 @@ const BOM = () => {
     saveAs(blob, 'bom_export.csv');
   };
 
+  // Calculate BOM statistics
+  const calculateBOMStats = () => {
+    const allParts = categories.flatMap(cat => cat.items);
+    const totalParts = allParts.length;
+    const receivedParts = allParts.filter(part => part.status === 'received').length;
+    const orderedParts = allParts.filter(part => part.status === 'ordered').length;
+    const approvedParts = allParts.filter(part => part.status === 'approved').length;
+    const notOrderedParts = allParts.filter(part => part.status === 'not-ordered').length;
+
+    return {
+      totalParts,
+      receivedParts,
+      orderedParts,
+      notOrderedParts,
+      approvedParts
+    };
+  };
+
   return (
     <div className="min-h-screen bg-background flex">
       <Sidebar 
@@ -256,6 +291,7 @@ const BOM = () => {
               projectName={projectDetails?.projectName || ''}
               projectId={projectDetails?.projectId || ''}
               clientName={projectDetails?.clientName || ''}
+              stats={calculateBOMStats()}
             />
 
             {/* Search and Actions Bar */}
@@ -531,5 +567,19 @@ const BOM = () => {
     </div>
   );
 };
+
+// Update the status mapping function to be more specific
+function mapStatusToFirestore(status: string): BOMStatus {
+  switch (status.toLowerCase()) {
+    case 'ordered':
+      return 'ordered';
+    case 'received':
+      return 'received';
+    case 'approved':
+      return 'approved';
+    default:
+      return 'not-ordered';
+  }
+}
 
 export default BOM;

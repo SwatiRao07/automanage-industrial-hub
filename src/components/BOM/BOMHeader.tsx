@@ -7,9 +7,16 @@ interface BOMHeaderProps {
   projectName: string;
   projectId: string;
   clientName: string;
+  stats: {
+    totalParts: number;
+    receivedParts: number;
+    orderedParts: number;
+    notOrderedParts: number;
+    approvedParts: number;
+  };
 }
 
-const BOMHeader = ({ projectName, projectId, clientName }: BOMHeaderProps) => {
+const BOMHeader = ({ projectName, projectId, clientName, stats }: BOMHeaderProps) => {
   return (
     <Card className="mb-6">
       <CardHeader>
@@ -32,22 +39,26 @@ const BOMHeader = ({ projectName, projectId, clientName }: BOMHeaderProps) => {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="text-center">
-            <div className="text-2xl font-bold text-blue-600">47</div>
+            <div className="text-2xl font-bold text-blue-600">{stats.totalParts}</div>
             <div className="text-sm text-gray-600">Total Parts</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-green-600">23</div>
+            <div className="text-2xl font-bold text-green-600">{stats.receivedParts}</div>
             <div className="text-sm text-gray-600">Received</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-amber-600">15</div>
+            <div className="text-2xl font-bold text-amber-600">{stats.orderedParts}</div>
             <div className="text-sm text-gray-600">Ordered</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-red-600">9</div>
-            <div className="text-sm text-gray-600">Pending</div>
+            <div className="text-2xl font-bold text-gray-700">{stats.approvedParts}</div>
+            <div className="text-sm text-gray-600">Approved</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-red-600">{stats.notOrderedParts}</div>
+            <div className="text-sm text-gray-600">Not Ordered</div>
           </div>
         </div>
       </CardContent>

@@ -13,6 +13,9 @@ import {
   Unsubscribe,
   getDoc
 } from "firebase/firestore";
+import type { BOMItem, BOMCategory, BOMStatus } from "@/types/bom";
+
+export type { BOMItem, BOMCategory, BOMStatus };
 
 export interface Project {
   projectId: string;
@@ -51,39 +54,8 @@ export const deleteProject = async (projectId: string) => {
   await deleteDoc(doc(projectsCol, projectId));
 };
 
-// BOM Types
-export interface BOMItem {
-  id: string;
-  name: string;
-  partId: string;
-  description: string;
-  category: string;
-  quantity: number;
-  vendors: Array<{
-    name: string;
-    price: number;
-    leadTime: string;
-    availability: string;
-  }>;
-  status: 'not-ordered' | 'ordered' | 'received' | 'approved';
-  expectedDelivery?: string;
-  poNumber?: string;
-  finalizedVendor?: {
-    name: string;
-    price: number;
-    leadTime: string;
-    availability: string;
-  };
-}
-
-export interface BOMCategory {
-  name: string;
-  items: BOMItem[];
-  isExpanded: boolean;
-}
-
 // BOM Functions
-export const getBOMData = async (projectId: string) => {
+export const getBOMData = async (projectId: string): Promise<BOMCategory[]> => {
   const bomRef = doc(db, 'projects', projectId, 'bom', 'data');
   const bomSnap = await getDoc(bomRef);
   if (bomSnap.exists()) {

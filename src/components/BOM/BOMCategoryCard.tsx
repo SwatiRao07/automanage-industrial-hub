@@ -1,10 +1,15 @@
 
-import { ChevronDown, ChevronRight, Package, Trash2, Pencil } from 'lucide-react';
+import { ChevronDown, ChevronRight, Package, Trash2, Pencil, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import BOMPartRow from './BOMPartRow';
 import { useState } from 'react';
+
+interface DocumentInfo {
+  name: string;
+  url: string;
+}
 
 interface BOMItem {
   id: string;
@@ -18,6 +23,7 @@ interface BOMItem {
     price: number;
     leadTime: string;
     availability: string;
+    documents?: DocumentInfo[];
   }>;
   status: 'not-ordered' | 'ordered' | 'received' | 'approved';
   expectedDelivery?: string;
