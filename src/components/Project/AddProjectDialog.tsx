@@ -1,25 +1,13 @@
 
 import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
-import { getDoc, doc } from "firebase/firestore";
-import { db } from "@/firebase";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { subscribeToProjects } from "@/utils/projectFirestore";
 
 interface AddProjectDialogProps {
   open: boolean;
@@ -28,119 +16,136 @@ interface AddProjectDialogProps {
 }
 
 const AddProjectDialog = ({ open, onOpenChange, onAddProject }: AddProjectDialogProps) => {
-  const [projectName, setProjectName] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [id, setId] = useState("");
+  const [name, setName] = useState("");
+  const [client, setClient] = useState("");
   const [description, setDescription] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [deadline, setDeadline] = useState<Date | undefined>();
-  const [status, setStatus] = useState("Ongoing");
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState("ongoing");
+  const [deadline, setDeadline] = useState("");
+  const [error, setError] = useState("");
 
-  const handleSubmit = async () => {
-    setError(null);
-    if (!projectName || !projectId || !clientName || !deadline) {
-      setError("Please fill all required fields.");
-      return;
-    }
-    // Check uniqueness of Project ID
-    const projectRef = doc(db, "projects", projectId);
-    const projectSnap = await getDoc(projectRef);
-    if (projectSnap.exists()) {
-      setError("Project ID already exists. Please choose a different ID.");
-      return;
-    }
-    onAddProject({
-      id: projectId,
-      name: projectName,
-      client: clientName,
-      deadline: format(deadline, "yyyy-MM-dd"),
-      status,
-      description,
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    // Check if project ID already exists
+    const unsubscribe = subscribeToProjects((projects) => {
+      const projectExists = projects.some(project => project.projectId === id);
+      unsubscribe(); // Unsubscribe immediately after checking
+
+      if (projectExists) {
+        setError("Project ID already exists. Please choose a different ID.");
+        return;
+      }
+
+      // If ID is unique, proceed with project creation
+      onAddProject({
+        id,
+        name,
+        client,
+        description,
+        status,
+        deadline,
+      });
+
+      // Reset form
+      setId("");
+      setName("");
+      setClient("");
+      setDescription("");
+      setStatus("ongoing");
+      setDeadline("");
+      onOpenChange(false);
     });
-    // Reset form
-    setProjectName("");
-    setProjectId("");
-    setDescription("");
-    setClientName("");
-    setDeadline(undefined);
-    setStatus("Ongoing");
-    onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
+      <DialogContent className="max-w-[425px] p-4">
+        <DialogHeader className="pb-2">
           <DialogTitle>Add New Project</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          {error && <div className="text-red-500 text-sm">{error}</div>}
-          <div className="grid gap-2">
-            <Label htmlFor="projectName">Project Name</Label>
-            <Input id="projectName" value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="Enter Project Name" />
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {error && (
+            <Alert variant="destructive" className="py-2">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <div className="space-y-1">
+            <Label htmlFor="id">Project ID</Label>
+            <Input
+              id="id"
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+              placeholder="Enter project ID"
+              required
+              className="h-8"
+            />
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="projectId">Project ID</Label>
-            <Input id="projectId" value={projectId} onChange={(e) => setProjectId(e.target.value)} placeholder="Enter ID" />
+          <div className="space-y-1">
+            <Label htmlFor="name">Project Name</Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter project name"
+              required
+              className="h-8"
+            />
           </div>
-          <div className="grid gap-2">
+          <div className="space-y-1">
+            <Label htmlFor="client">Client Name</Label>
+            <Input
+              id="client"
+              value={client}
+              onChange={(e) => setClient(e.target.value)}
+              placeholder="Enter client name"
+              required
+              className="h-8"
+            />
+          </div>
+          <div className="space-y-1">
             <Label htmlFor="description">Description</Label>
-            <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Enter Description" />
+            <Textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Enter project description"
+              required
+              className="h-16 min-h-[64px] resize-none"
+            />
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="clientName">Client Name</Label>
-            <Input id="clientName" value={clientName} onChange={(e) => setClientName(e.target.value)} placeholder="Enter Client Name" />
-          </div>
-          <div className="grid gap-2">
+          <div className="space-y-1">
             <Label htmlFor="status">Status</Label>
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select status" />
+              <SelectTrigger className="h-8">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Ongoing">🟢 Ongoing</SelectItem>
-                <SelectItem value="Delayed">🔴 Delayed</SelectItem>
-                <SelectItem value="Completed">✅ Completed</SelectItem>
+                <SelectItem value="ongoing">Ongoing</SelectItem>
+                <SelectItem value="delayed">Delayed</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-2">
+          <div className="space-y-1">
             <Label htmlFor="deadline">Deadline</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant={"outline"}
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !deadline && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {deadline ? format(deadline, "PPP") : <span>Pick a date</span>}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={deadline}
-                  onSelect={setDeadline}
-                  initialFocus
-                  disabled={(date) => date < new Date()}
-                />
-              </PopoverContent>
-            </Popover>
+            <Input
+              id="deadline"
+              type="date"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              required
+              className="h-8"
+            />
           </div>
-        </div>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="secondary">
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="h-8">
               Cancel
             </Button>
-          </DialogClose>
-          <Button type="submit" onClick={handleSubmit}>
-            Add Project
-          </Button>
-        </DialogFooter>
+            <Button type="submit" className="h-8">Add Project</Button>
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
   );

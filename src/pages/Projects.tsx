@@ -66,7 +66,7 @@ const Projects = () => {
       projectName: updatedProject.projectName,
       clientName: updatedProject.clientName,
       description: updatedProject.description,
-      status: mapStatusToFirestore(updatedProject.status),
+      status: updatedProject.status,
       deadline: updatedProject.deadline,
     };
     await updateProject(projectId, updates);

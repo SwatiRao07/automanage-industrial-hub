@@ -322,21 +322,6 @@ const TimeEntryTab = () => {
   return (
     <div className="space-y-6">
       {/* Header Section */}
-      <div className="rounded-2xl shadow-lg bg-blue-900 text-white p-8 mb-2 border border-blue-200">
-        <h1 className="text-3xl font-bold mb-1">Employee Timesheet</h1>
-        <div className="text-lg opacity-90 mb-2">ABC OCR Project</div>
-        <div className="flex flex-wrap gap-6 mt-2">
-          <div className="flex items-center gap-2 text-base opacity-90">
-            <span role="img" aria-label="company">🏢</span> ABC Ltd
-          </div>
-          <div className="flex items-center gap-2 text-base opacity-90">
-            <span role="img" aria-label="calendar">📅</span> Started: July 1, 2025
-          </div>
-          <div className="flex items-center gap-2 text-base opacity-90">
-            <span role="img" aria-label="team">👥</span> 5 Team Members
-          </div>
-        </div>
-      </div>
 
       {/* Controls - flex row, project hours to right (remove Add New Week button) */}
       <div className="flex flex-wrap gap-4 items-center mb-4 justify-between">

@@ -4,11 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, TrendingUp, TrendingDown, FileDown, Edit2, DollarSign, Clock, Package } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, ResponsiveContainer, Legend } from "recharts";
 import { Progress } from "@/components/ui/progress";
 import Sidebar from "@/components/Sidebar";
 import ProfitLossGauge from "@/components/ProfitLossGauge";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/firebase";
 
 const CostAnalysis = () => {
   const navigate = useNavigate();
@@ -19,6 +21,29 @@ const CostAnalysis = () => {
   const [miscCost, setMiscCost] = useState(0);
   const [isEditingMisc, setIsEditingMisc] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const [searchParams] = useSearchParams();
+  const projectIdParam = searchParams.get('project');
+  const [projectDetails, setProjectDetails] = useState<{ projectName: string; projectId: string; clientName: string; deadline: string } | null>(null);
+
+  useEffect(() => {
+    const fetchProject = async () => {
+      if (projectIdParam) {
+        const projectRef = doc(db, 'projects', projectIdParam);
+        const projectSnap = await getDoc(projectRef);
+        if (projectSnap.exists()) {
+          const data = projectSnap.data();
+          setProjectDetails({
+            projectName: data.projectName || '',
+            projectId: data.projectId || '',
+            clientName: data.clientName || '',
+            deadline: data.deadline || '',
+          });
+        }
+      }
+    };
+    fetchProject();
+  }, [projectIdParam]);
 
   // Mock data - in real app, this would come from API
   const projectData = {
@@ -149,19 +174,19 @@ const CostAnalysis = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Project Name</p>
-                  <p className="font-semibold">{projectData.name}</p>
+                  <p className="font-semibold">{projectDetails ? projectDetails.projectName : ''}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Project ID</p>
-                  <p className="font-semibold">{projectData.id}</p>
+                  <p className="font-semibold">{projectDetails ? projectDetails.projectId : ''}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Client</p>
-                  <p className="font-semibold">{projectData.client}</p>
+                  <p className="font-semibold">{projectDetails ? projectDetails.clientName : ''}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Timeline</p>
-                  <p className="font-semibold text-sm">{projectData.startDate} – {projectData.endDate}</p>
+                  <p className="text-sm text-muted-foreground">Deadline</p>
+                  <p className="font-semibold text-sm">{projectDetails ? projectDetails.deadline : ''}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Status</p>

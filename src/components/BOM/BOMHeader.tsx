@@ -3,31 +3,29 @@ import { Calendar, User, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
-const BOMHeader = () => {
+interface BOMHeaderProps {
+  projectName: string;
+  projectId: string;
+  clientName: string;
+}
+
+const BOMHeader = ({ projectName, projectId, clientName }: BOMHeaderProps) => {
   return (
     <Card className="mb-6">
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-2xl font-bold text-gray-900">
-              Vision System Alpha - BOM
+              {projectName} - BOM
             </CardTitle>
             <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-gray-600">
               <div className="flex items-center gap-1">
                 <span className="font-medium">Project ID:</span>
-                <Badge variant="outline">PRJ-2024-001</Badge>
+                <Badge variant="outline">{projectId}</Badge>
               </div>
               <div className="flex items-center gap-1">
                 <Building2 size={16} />
-                <span>Manufacturing Corp</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <User size={16} />
-                <span>Created by John Smith</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Calendar size={16} />
-                <span>Last updated: Feb 28, 2024</span>
+                <span>{clientName}</span>
               </div>
             </div>
           </div>
