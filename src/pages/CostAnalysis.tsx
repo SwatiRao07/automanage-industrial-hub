@@ -11,10 +11,12 @@ import Sidebar from "@/components/Sidebar";
 import ProfitLossGauge from "@/components/ProfitLossGauge";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/firebase";
+import { getBOMData, getTotalBOMCost, updateProject } from "@/utils/projectFirestore";
+import { fetchEngineers, getTotalManHours } from "@/utils/timeTrackingFirestore";
 
 const CostAnalysis = () => {
   const navigate = useNavigate();
-  const [costPerHour, setCostPerHour] = useState(1500);
+  const [costPerHour, setCostPerHour] = useState(0);
   const [estimatedBudget, setEstimatedBudget] = useState(600000);
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [isEditingRate, setIsEditingRate] = useState(false);
@@ -22,42 +24,68 @@ const CostAnalysis = () => {
   const [isEditingMisc, setIsEditingMisc] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  const [materialCost, setMaterialCost] = useState(0);
+  const [totalManHours, setTotalManHours] = useState(0);
+
   const [searchParams] = useSearchParams();
   const projectIdParam = searchParams.get('project');
   const [projectDetails, setProjectDetails] = useState<{ projectName: string; projectId: string; clientName: string; deadline: string } | null>(null);
 
   useEffect(() => {
-    const fetchProject = async () => {
-      if (projectIdParam) {
-        const projectRef = doc(db, 'projects', projectIdParam);
-        const projectSnap = await getDoc(projectRef);
-        if (projectSnap.exists()) {
-          const data = projectSnap.data();
-          setProjectDetails({
-            projectName: data.projectName || '',
-            projectId: data.projectId || '',
-            clientName: data.clientName || '',
-            deadline: data.deadline || '',
-          });
-        }
+    const fetchAllData = async () => {
+      if (!projectIdParam) return;
+      // Fetch project details and editable fields
+      const projectRef = doc(db, 'projects', projectIdParam);
+      const projectSnap = await getDoc(projectRef);
+      if (projectSnap.exists()) {
+        const data = projectSnap.data();
+        setProjectDetails({
+          projectName: data.projectName || '',
+          projectId: data.projectId || '',
+          clientName: data.clientName || '',
+          deadline: data.deadline || '',
+        });
+        setCostPerHour(data.costPerHour || 0);
+        setMiscCost(data.miscCost || 0);
+        setEstimatedBudget(
+          typeof data.estimatedBudget === 'number' && !isNaN(data.estimatedBudget)
+            ? data.estimatedBudget
+            : 0
+        );
       }
+      // Fetch BOM and calculate material cost
+      const bomCategories = await getBOMData(projectIdParam);
+      setMaterialCost(getTotalBOMCost(bomCategories));
+      // Fetch engineers and calculate total man hours
+      const engineers = await fetchEngineers(projectIdParam);
+      setTotalManHours(getTotalManHours(engineers));
     };
-    fetchProject();
+    fetchAllData();
   }, [projectIdParam]);
 
-  // Mock data - in real app, this would come from API
-  const projectData = {
-    name: "Factory Automation Line 3",
-    id: "FAL-2024-003",
-    client: "TechCorp Manufacturing",
-    startDate: "2024-01-15",
-    endDate: "2024-06-30",
-    totalHours: 135,
-    bomCost: 450000,
+  // Update cost per hour in Firestore
+  const handleCostPerHourBlur = async () => {
+    if (!projectIdParam) return;
+    await updateProject(projectIdParam, { costPerHour });
+    setIsEditingRate(false);
   };
 
-  const engineerCost = projectData.totalHours * costPerHour;
-  const totalCost = projectData.bomCost + engineerCost + miscCost;
+  // Update misc cost in Firestore
+  const handleMiscCostBlur = async () => {
+    if (!projectIdParam) return;
+    await updateProject(projectIdParam, { miscCost });
+    setIsEditingMisc(false);
+  };
+
+  // Update estimated budget in Firestore
+  const handleEstimatedBudgetBlur = async () => {
+    if (!projectIdParam) return;
+    await updateProject(projectIdParam, { estimatedBudget });
+    setIsEditingBudget(false);
+  };
+
+  const engineerCost = totalManHours * costPerHour;
+  const totalCost = materialCost + engineerCost + miscCost;
   const profitLoss = estimatedBudget - totalCost;
   const isProfit = profitLoss > 0;
   const budgetUsage = (totalCost / estimatedBudget) * 100;
@@ -79,7 +107,7 @@ const CostAnalysis = () => {
 
   // Chart data
   const costCompositionData = [
-    { name: "Material Cost", value: projectData.bomCost, color: "#8B5CF6" },
+    { name: "Material Cost", value: materialCost, color: "#8B5CF6" },
     { name: "Engineering Cost", value: engineerCost, color: "#06B6D4" },
     { name: "Miscellaneous Cost", value: miscCost, color: "#F59E42" },
   ];
@@ -111,7 +139,7 @@ const CostAnalysis = () => {
   // Editable descriptions for cost items
   const [costDescriptions, setCostDescriptions] = useState([
     "Material and component costs",
-    `${projectData.totalHours} hrs @ ₹${costPerHour}/hr`,
+    `${totalManHours} hrs @ ₹${costPerHour}/hr`,
     "Transport, overhead",
   ]);
   const [editingDescIdx, setEditingDescIdx] = useState<number | null>(null);
@@ -121,10 +149,10 @@ const CostAnalysis = () => {
   useEffect(() => {
     setCostDescriptions((prev) => [
       prev[0],
-      `${projectData.totalHours} hrs @ ₹${costPerHour}/hr`,
+      `${totalManHours} hrs @ ₹${costPerHour}/hr`,
       prev[2],
     ]);
-  }, [projectData.totalHours, costPerHour]);
+  }, [totalManHours, costPerHour]);
 
   const handleDescChange = (idx: number, value: string) => {
     setCostDescriptions((prev) => prev.map((desc, i) => (i === idx ? value : desc)));
@@ -135,7 +163,7 @@ const CostAnalysis = () => {
   const statusBadge = getStatusBadge();
 
   const costItemsData = [
-    { category: "BOM", description: costDescriptions[0], cost: projectData.bomCost, notes: "From BOM tab" },
+    { category: "BOM", description: costDescriptions[0], cost: materialCost, notes: "From BOM tab" },
     { category: "Engineer", description: costDescriptions[1], cost: engineerCost, notes: "Auto-calculated" },
     { category: "Miscellaneous", description: costDescriptions[2], cost: miscCost, notes: "Manually added" },
   ];
@@ -209,11 +237,11 @@ const CostAnalysis = () => {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-sm font-medium">Material Cost</span>
-                    <span className="font-semibold">{formatCurrency(projectData.bomCost)}</span>
+                    <span className="font-semibold">{formatCurrency(materialCost)}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-sm font-medium">Total Man Hours</span>
-                    <span className="font-semibold">{projectData.totalHours} hrs</span>
+                    <span className="font-semibold">{totalManHours} hrs</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-sm font-medium">Cost per Hour</span>
@@ -223,7 +251,7 @@ const CostAnalysis = () => {
                           type="number"
                           value={costPerHour}
                           onChange={(e) => setCostPerHour(parseInt(e.target.value) || 0)}
-                          onBlur={() => setIsEditingRate(false)}
+                          onBlur={handleCostPerHourBlur}
                           className="w-24 h-8"
                           autoFocus
                         />
@@ -250,7 +278,7 @@ const CostAnalysis = () => {
                           type="number"
                           value={miscCost}
                           onChange={(e) => setMiscCost(parseInt(e.target.value) || 0)}
-                          onBlur={() => setIsEditingMisc(false)}
+                          onBlur={handleMiscCostBlur}
                           className="w-24 h-8"
                           autoFocus
                         />
@@ -307,9 +335,12 @@ const CostAnalysis = () => {
                   {isEditingBudget ? (
                     <Input
                       type="number"
-                      value={estimatedBudget}
-                      onChange={(e) => setEstimatedBudget(parseInt(e.target.value) || 0)}
-                      onBlur={() => setIsEditingBudget(false)}
+                      value={estimatedBudget === 0 ? '' : estimatedBudget}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setEstimatedBudget(isNaN(val) ? 0 : val);
+                      }}
+                      onBlur={handleEstimatedBudgetBlur}
                       className="text-xl font-bold text-center"
                       autoFocus
                     />
@@ -322,7 +353,7 @@ const CostAnalysis = () => {
                   <span className="text-sm text-muted-foreground mb-1">Material vs Engineer</span>
                   <span className="text-2xl font-bold">
                     {(() => {
-                      const mat = projectData.bomCost;
+                      const mat = materialCost;
                       const eng = engineerCost;
                       const misc = miscCost;
                       const total = mat + eng + misc;

@@ -150,3 +150,15 @@ export const addWeek = async (projectId: string, week: Week) => {
   await Promise.all(updatePromises);
   return week;
 }; 
+
+// Utility to calculate total man hours for a project
+export const getTotalManHours = (engineers: (Engineer & { id: string })[]): number => {
+  return engineers.reduce((total, engineer) => {
+    return (
+      total +
+      Object.values(engineer.weeks || {}).reduce((engSum, weekData) => {
+        return engSum + (weekData.total || 0);
+      }, 0)
+    );
+  }, 0);
+}; 

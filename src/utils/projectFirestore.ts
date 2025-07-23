@@ -96,4 +96,19 @@ export const deleteBOMItem = async (projectId: string, categories: BOMCategory[]
     items: category.items.filter(item => item.id !== itemId)
   }));
   await updateBOMData(projectId, updatedCategories);
+};
+
+// Utility to calculate total BOM material cost for a project
+export const getTotalBOMCost = (categories: BOMCategory[]): number => {
+  return categories.reduce((total, category) => {
+    return (
+      total +
+      category.items.reduce((catSum, item) => {
+        if (item.finalizedVendor && typeof item.finalizedVendor.price === 'number') {
+          return catSum + item.finalizedVendor.price * (item.quantity || 1);
+        }
+        return catSum;
+      }, 0)
+    );
+  }, 0);
 }; 
