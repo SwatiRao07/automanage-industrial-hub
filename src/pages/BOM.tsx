@@ -23,6 +23,14 @@ import {
 import { BOMItem, BOMCategory, BOMStatus } from '@/types/bom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/firebase';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogFooter,
+  AlertDialogAction
+} from '@/components/ui/alert-dialog';
 
 const BOM = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -578,6 +586,17 @@ const BOM = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={emailStatus === 'Email sent successfully!'} onOpenChange={(open) => { if (!open) setEmailStatus(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Email sent successfully!</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setEmailStatus(null)}>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
