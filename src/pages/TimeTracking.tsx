@@ -117,9 +117,6 @@ const TimeTracking = () => {
                   <span role="img" aria-label="company">🏢</span> {projectDetails ? projectDetails.clientName : ''}
                 </div>
                 <div className="flex items-center gap-2 text-base opacity-90">
-                  <span role="img" aria-label="calendar">📅</span> Started: {projectDetails?.startDate?.toLocaleDateString() || 'Not set'}
-                </div>
-                <div className="flex items-center gap-2 text-base opacity-90">
                   <span role="img" aria-label="team">👥</span> Team Members
                 </div>
               </div>

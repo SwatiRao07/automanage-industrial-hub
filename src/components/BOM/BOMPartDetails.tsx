@@ -530,7 +530,7 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                     <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">{availability}</span>
                   </div>
                   <div className="flex items-center gap-6 text-gray-700 mb-2">
-                    <span className="flex items-center gap-1 text-sm"><span className="text-base">$</span>{price}</span>
+                    <span className="flex items-center gap-1 text-sm"><span className="text-base">₹</span>{price}</span>
                     <span className="flex items-center gap-1 text-sm"><Clock size={16} />{leadTime}</span>
                   </div>
                   <div className="flex items-center gap-3">
