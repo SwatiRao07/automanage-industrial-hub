@@ -136,12 +136,6 @@ const BOM = () => {
       }
     }
 
-    // Build description string from key-value pairs
-    const descriptionString = newPart.descriptionKV
-      .filter(kv => kv.key.trim() && kv.value.trim())
-      .map(kv => `• ${kv.key}: ${kv.value}`)
-      .join('\n');
-
     const newCategories = updatedCategories.map(cat =>
       cat.name === finalCategory
         ? {
@@ -150,12 +144,12 @@ const BOM = () => {
               id: Date.now().toString(),
               name: newPart.name,
               partId: newPart.partId,
-              description: descriptionString,
+              description: newPart.descriptionKV.map(kv => `${kv.key}: ${kv.value}`).join('\n'),
               category: finalCategory || '',
               quantity: newPart.quantity,
               vendors: [],
-              status: 'not-ordered' as const
-            }]
+              status: 'not-ordered' as BOMStatus,
+            } as BOMItem]
           }
         : cat
     );
@@ -210,7 +204,7 @@ const BOM = () => {
           item.partId.toLowerCase().includes(searchTerm.toLowerCase()) ||
           item.description.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus =
-          selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
+          selectedStatuses.length === 0 || selectedStatuses.includes(item.status as string);
         const matchesCategory =
           selectedCategories.length === 0 || selectedCategories.includes(category.name);
         return matchesSearch && matchesStatus && matchesCategory;
@@ -340,7 +334,7 @@ const BOM = () => {
                     onEditCategory={handleEditCategory}
                     onStatusChange={(partId, newStatus) => {
                       if (projectId) {
-                        updateBOMItem(projectId, categories, partId, { status: newStatus });
+                        updateBOMItem(projectId, categories, partId, { status: newStatus as BOMStatus });
                       }
                     }}
                   />
@@ -491,58 +485,6 @@ const BOM = () => {
             </div>
 
             <div>
-              <Label>Description</Label>
-              <div className="space-y-2">
-                {newPart.descriptionKV.map((kv, idx) => (
-                  <div key={idx} className="flex gap-2">
-                    <Input
-                      placeholder="Key"
-                      value={kv.key}
-                      onChange={e => setNewPart({
-                        ...newPart,
-                        descriptionKV: newPart.descriptionKV.map((item, i) => 
-                          i === idx ? { ...item, key: e.target.value } : item
-                        )
-                      })}
-                    />
-                    <Input
-                      placeholder="Value"
-                      value={kv.value}
-                      onChange={e => setNewPart({
-                        ...newPart,
-                        descriptionKV: newPart.descriptionKV.map((item, i) => 
-                          i === idx ? { ...item, value: e.target.value } : item
-                        )
-                      })}
-                    />
-                    {newPart.descriptionKV.length > 1 && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setNewPart({
-                          ...newPart,
-                          descriptionKV: newPart.descriptionKV.filter((_, i) => i !== idx)
-                        })}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setNewPart({
-                    ...newPart,
-                    descriptionKV: [...newPart.descriptionKV, { key: '', value: '' }]
-                  })}
-                >
-                  Add Row
-                </Button>
-              </div>
-            </div>
-
-            <div>
               <Label htmlFor="quantity">Quantity</Label>
               <Input
                 id="quantity"
@@ -551,6 +493,54 @@ const BOM = () => {
                 value={newPart.quantity}
                 onChange={e => setNewPart({ ...newPart, quantity: Number(e.target.value) })}
               />
+            </div>
+
+            <div>
+              <Label htmlFor="description">Description (Key: Value)</Label>
+              <div className="space-y-2">
+                {newPart.descriptionKV.map((kv, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      type="text"
+                      placeholder="Key"
+                      value={kv.key}
+                      onChange={e => {
+                        const newDescriptionKV = [...newPart.descriptionKV];
+                        newDescriptionKV[index] = { ...kv, key: e.target.value };
+                        setNewPart({ ...newPart, descriptionKV: newDescriptionKV });
+                      }}
+                    />
+                    <Input
+                      type="text"
+                      placeholder="Value"
+                      value={kv.value}
+                      onChange={e => {
+                        const newDescriptionKV = [...newPart.descriptionKV];
+                        newDescriptionKV[index] = { ...kv, value: e.target.value };
+                        setNewPart({ ...newPart, descriptionKV: newDescriptionKV });
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const newDescriptionKV = [...newPart.descriptionKV];
+                        newDescriptionKV.splice(index, 1);
+                        setNewPart({ ...newPart, descriptionKV: newDescriptionKV });
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setNewPart(prev => ({ ...prev, descriptionKV: [...prev.descriptionKV, { key: '', value: '' }] }))}
+                >
+                  Add Row
+                </Button>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2">
