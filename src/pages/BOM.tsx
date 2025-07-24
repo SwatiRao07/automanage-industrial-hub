@@ -46,6 +46,7 @@ const BOM = () => {
   const [addingNewCategory, setAddingNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [addPartError, setAddPartError] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
 
   // Load BOM data when project ID changes
   useEffect(() => {
@@ -194,6 +195,25 @@ const BOM = () => {
     await updateBOMItem(projectId, categories, updatedPart.id, updatedPart);
   };
 
+  const handleCreatePurchaseOrder = async () => {
+    setEmailStatus(null);
+    try {
+      const response = await fetch('http://localhost:5001/send-purchase-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: 'swathi.rao@btech.christuniversity.in' }), // Updated recipient
+      });
+      const data = await response.json();
+      if (data.success) {
+        setEmailStatus('Email sent successfully!');
+      } else {
+        setEmailStatus('Failed to send email: ' + data.error);
+      }
+    } catch (err: any) {
+      setEmailStatus('Error: ' + err.message);
+    }
+  };
+
   // Filtered categories based on search and filter selections
   const filteredCategories = categories
     .map(category => ({
@@ -316,8 +336,12 @@ const BOM = () => {
                   <Download className="mr-2 h-4 w-4" />
                   Export
                 </Button>
+                <Button variant="outline" onClick={handleCreatePurchaseOrder}>
+                  Create Purchase Order
+                </Button>
               </div>
             </div>
+            {emailStatus && <div className="mt-2 text-sm">{emailStatus}</div>}
 
             {/* BOM Content */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
