@@ -740,14 +740,14 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
         </div>
         
         {/* Action Buttons */}
-        <div className="space-y-2 pt-4">
+        {/* <div className="space-y-2 pt-4">
           <Button className="w-full">
             Create Purchase Order
           </Button>
           <Button variant="outline" className="w-full">
             Edit Part Details
           </Button>
-        </div>
+        </div> */}
       </CardContent>
     </Card>
   );
