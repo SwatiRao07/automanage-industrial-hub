@@ -17,12 +17,7 @@ import {
 import { cn } from '@/lib/utils';
 
 const menuItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: FolderOpen, label: 'Projects', path: '/projects' },
-  { icon: FileText, label: 'BOMs', path: '/bom' },
-  { icon: Clock, label: 'Time Tracking', path: '/time-tracking' },
-  { icon: Calculator, label: 'Cost Analysis', path: '/cost-analysis' },
-  { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
 interface SidebarProps {
