@@ -10,6 +10,7 @@ import BOM from "./pages/BOM";
 import TimeTracking from "./pages/TimeTracking";
 import CostAnalysis from "./pages/CostAnalysis";
 import NotFound from "./pages/NotFound";
+import Vendors from "./pages/Vendors";
 
 const queryClient = new QueryClient();
 
@@ -20,9 +21,10 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
+          <Route path="/" element={<Projects />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/bom" element={<BOM />} />
+          <Route path="/vendors" element={<Vendors />} />
           <Route path="/time-tracking" element={<TimeTracking />} />
           <Route path="/cost-analysis" element={<CostAnalysis />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

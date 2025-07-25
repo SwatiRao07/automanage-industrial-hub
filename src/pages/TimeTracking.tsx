@@ -1,59 +1,129 @@
-import { useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, Clock, Calculator } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import { doc, getDoc, setDoc, collection } from "firebase/firestore";
+import { db } from "@/firebase";
 import TimeEntryTab from "@/components/TimeTracking/TimeEntryTab";
-import CostCalculationTab from "@/components/TimeTracking/CostCalculationTab";
+import Sidebar from '@/components/Sidebar';
+import { Week, addWeek } from "@/utils/timeTrackingFirestore";
+
+interface ProjectDetails {
+  projectName: string;
+  projectId: string;
+  clientName: string;
+  startDate?: Date;
+}
 
 const TimeTracking = () => {
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("time-entry");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get('project');
+  const [projectDetails, setProjectDetails] = useState<ProjectDetails | null>(null);
+  const [isInitializing, setIsInitializing] = useState(false);
 
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/")}
-              className="flex items-center gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
-            </Button>
-            <div className="flex items-center gap-2">
-              <Clock className="h-6 w-6 text-primary" />
-              <h1 className="text-2xl font-bold">Time Tracking</h1>
+  useEffect(() => {
+    const initializeProject = async () => {
+      if (!projectId) return;
+
+      try {
+        setIsInitializing(true);
+        const projectRef = doc(db, 'projects', projectId);
+        const projectSnap = await getDoc(projectRef);
+
+        if (projectSnap.exists()) {
+          const data = projectSnap.data();
+          setProjectDetails({
+            projectName: data.projectName || '',
+            projectId: data.projectId || '',
+            clientName: data.clientName || '',
+          });
+
+          // Check if time tracking is initialized
+          const weeksRef = collection(db, 'projects', projectId, 'weeks');
+          const weeksSnap = await getDoc(doc(weeksRef, 'week1'));
+
+          if (!weeksSnap.exists()) {
+            // Initialize first 4 weeks
+            const today = new Date();
+            const projectStartDate = data.startDate?.toDate() || today;
+            
+            for (let i = 0; i < 4; i++) {
+              const weekStart = new Date(projectStartDate);
+              weekStart.setDate(projectStartDate.getDate() + i * 7);
+              const weekEnd = new Date(weekStart);
+              weekEnd.setDate(weekStart.getDate() + 6);
+
+              const weekNum = i + 1;
+              const week: Week = {
+                key: `week${weekNum}`,
+                label: `Week ${weekNum}`,
+                dates: `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}-${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+                status: i === 0 ? 'current' : 'future',
+                startDate: weekStart,
+                endDate: weekEnd
+              };
+
+              await addWeek(projectId, week);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing project:', error);
+        // TODO: Show error toast
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    initializeProject();
+  }, [projectId]);
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-background flex">
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
+        <div className={`flex-1 flex flex-col ${sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
+          <main className="flex-1 p-6">
+            <div className="max-w-7xl mx-auto text-center">
+              <div className="animate-pulse">Initializing time tracking...</div>
             </div>
-          </div>
+          </main>
         </div>
       </div>
+    );
+  }
 
-      <div className="container mx-auto px-4 py-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 max-w-md">
-            <TabsTrigger value="time-entry" className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Time Entry
-            </TabsTrigger>
-            <TabsTrigger value="cost-calculation" className="flex items-center gap-2">
-              <Calculator className="h-4 w-4" />
-              Cost Analysis
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="time-entry" className="mt-6">
+  return (
+    <div className="min-h-screen bg-background flex">
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+      />
+      <div className={`flex-1 flex flex-col ${sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
+        <main className="flex-1 p-6">
+          <div className="max-w-7xl mx-auto">
+            {/* Project Header */}
+            <div className="rounded-2xl shadow-lg bg-blue-900 text-white p-8 mb-2 border border-blue-200">
+              <h1 className="text-3xl font-bold mb-1">
+                {projectDetails ? `${projectDetails.projectName} - Timesheet` : 'Employee Timesheet'}
+              </h1>
+              <div className="text-lg opacity-90 mb-2">
+                {projectDetails ? projectDetails.projectId : ''}
+              </div>
+              <div className="flex flex-wrap gap-6 mt-2">
+                <div className="flex items-center gap-2 text-base opacity-90">
+                  <span role="img" aria-label="company">🏢</span> {projectDetails ? projectDetails.clientName : ''}
+                </div>
+                <div className="flex items-center gap-2 text-base opacity-90">
+                  <span role="img" aria-label="team">👥</span> Team Members
+                </div>
+              </div>
+            </div>
             <TimeEntryTab />
-          </TabsContent>
-
-          <TabsContent value="cost-calculation" className="mt-6">
-            <CostCalculationTab />
-          </TabsContent>
-        </Tabs>
+          </div>
+        </main>
       </div>
     </div>
   );
