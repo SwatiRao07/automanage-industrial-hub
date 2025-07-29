@@ -110,8 +110,8 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
   // Update vendors and notify parent
   const updateVendors = (newVendors) => {
     setVendors(newVendors);
-    if (typeof onUpdatePart === 'function') {
-      onUpdatePart({ ...part, vendors: newVendors });
+    if (typeof onUpdatePart === 'function' && partState) {
+      onUpdatePart({ ...partState, vendors: newVendors });
     }
   };
 
