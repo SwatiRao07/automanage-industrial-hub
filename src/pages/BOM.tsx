@@ -45,7 +45,6 @@ const BOM = () => {
   const [addPartOpen, setAddPartOpen] = useState(false);
   const [newPart, setNewPart] = useState({ 
     name: '', 
-    partId: '', 
     quantity: 1, 
     descriptionKV: [{ key: '', value: '' }] 
   });
@@ -112,9 +111,9 @@ const BOM = () => {
     await updateBOMData(projectId, updatedCategories);
   };
 
-  const handleQuantityChange = async (partId: string, newQuantity: number) => {
+  const handleQuantityChange = async (itemId: string, newQuantity: number) => {
     if (!projectId) return;
-    await updateBOMItem(projectId, categories, partId, { quantity: newQuantity });
+    await updateBOMItem(projectId, categories, itemId, { quantity: newQuantity });
   };
 
   const handlePartClick = (part: BOMItem) => {
@@ -123,13 +122,6 @@ const BOM = () => {
 
   const handleAddPart = async () => {
     if (!projectId) return;
-
-    // Check for duplicate Part ID
-    const allPartIds = categories.flatMap(cat => cat.items.map(item => item.partId.toLowerCase()));
-    if (allPartIds.includes(newPart.partId.trim().toLowerCase())) {
-      setAddPartError('Part ID must be unique. This Part ID already exists.');
-      return;
-    }
 
     setAddPartError(null);
     if (!categoryForPart && !addingNewCategory) return;
@@ -151,7 +143,6 @@ const BOM = () => {
             items: [...cat.items, {
               id: Date.now().toString(),
               name: newPart.name,
-              partId: newPart.partId,
               description: newPart.descriptionKV.map(kv => `${kv.key}: ${kv.value}`).join('\n'),
               category: finalCategory || '',
               quantity: newPart.quantity,
@@ -165,7 +156,7 @@ const BOM = () => {
     await updateBOMData(projectId, newCategories);
     
     // Reset form
-    setNewPart({ name: '', partId: '', quantity: 1, descriptionKV: [{ key: '', value: '' }] });
+    setNewPart({ name: '', quantity: 1, descriptionKV: [{ key: '', value: '' }] });
     setAddPartOpen(false);
     setCategoryForPart(null);
     setAddingNewCategory(false);
@@ -189,10 +180,10 @@ const BOM = () => {
     await updateBOMData(projectId, updatedCategories);
   };
 
-  const handleDeletePart = async (partId: string) => {
+  const handleDeletePart = async (itemId: string) => {
     if (!projectId) return;
-    await deleteBOMItem(projectId, categories, partId);
-    if (selectedPart?.id === partId) {
+    await deleteBOMItem(projectId, categories, itemId);
+    if (selectedPart?.id === itemId) {
       setSelectedPart(null);
     }
   };
@@ -228,7 +219,6 @@ const BOM = () => {
       items: category.items.filter(item => {
         const matchesSearch =
           item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.partId.toLowerCase().includes(searchTerm.toLowerCase()) ||
           item.description.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus =
           selectedStatuses.length === 0 || selectedStatuses.includes(item.status as string);
@@ -245,7 +235,6 @@ const BOM = () => {
       'Project ID',
       'Project Name',
       'Client Name',
-      'Part ID',
       'Part Name',
       'Category',
       'Quantity',
@@ -260,7 +249,6 @@ const BOM = () => {
         projectDetails?.projectId || '',
         projectDetails?.projectName || '',
         projectDetails?.clientName || '',
-        item.partId,
         item.name,
         category.name,
         item.quantity,
@@ -363,9 +351,9 @@ const BOM = () => {
                     onQuantityChange={handleQuantityChange}
                     onDeletePart={handleDeletePart}
                     onEditCategory={handleEditCategory}
-                    onStatusChange={(partId, newStatus) => {
+                    onStatusChange={(itemId, newStatus) => {
                       if (projectId) {
-                        updateBOMItem(projectId, categories, partId, { status: newStatus as BOMStatus });
+                        updateBOMItem(projectId, categories, itemId, { status: newStatus as BOMStatus });
                       }
                     }}
                   />
@@ -505,15 +493,7 @@ const BOM = () => {
               />
             </div>
 
-            <div>
-              <Label htmlFor="partId">Part ID</Label>
-              <Input
-                id="partId"
-                value={newPart.partId}
-                onChange={e => setNewPart({ ...newPart, partId: e.target.value })}
-                placeholder="Enter part ID"
-              />
-            </div>
+
 
             <div>
               <Label htmlFor="quantity">Quantity</Label>
@@ -575,7 +555,7 @@ const BOM = () => {
             </div>
 
             <div className="flex justify-end gap-2">
-              <Button onClick={handleAddPart} disabled={!newPart.name.trim() || !newPart.partId.trim()}>
+              <Button onClick={handleAddPart} disabled={!newPart.name.trim()}>
                 Add
               </Button>
               <Button variant="outline" onClick={() => setAddPartOpen(false)}>

@@ -3,7 +3,6 @@ export type BOMStatus = 'not-ordered' | 'ordered' | 'received' | 'approved';
 export interface BOMItem {
   id: string;
   name: string;
-  partId: string;
   description: string;
   category: string;
   quantity: number;

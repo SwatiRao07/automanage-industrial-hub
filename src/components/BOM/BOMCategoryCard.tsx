@@ -14,7 +14,6 @@ interface DocumentInfo {
 interface BOMItem {
   id: string;
   name: string;
-  partId: string;
   description: string;
   category: string;
   quantity: number;
@@ -40,11 +39,11 @@ interface BOMCategoryCardProps {
   category: BOMCategory;
   onToggle: () => void;
   onPartClick: (part: BOMItem) => void;
-  onQuantityChange?: (partId: string, newQuantity: number) => void;
-  onDeletePart?: (partId: string) => void;
+  onQuantityChange?: (itemId: string, newQuantity: number) => void;
+  onDeletePart?: (itemId: string) => void;
   onDeleteCategory?: (categoryName: string) => void;
   onEditCategory?: (oldName: string, newName: string) => void;
-  onStatusChange?: (partId: string, newStatus: string) => void;
+  onStatusChange?: (itemId: string, newStatus: string) => void;
 }
 
 const BOMCategoryCard = ({ category, onToggle, onPartClick, onQuantityChange, onDeleteCategory, onEditCategory, onStatusChange }: BOMCategoryCardProps) => {

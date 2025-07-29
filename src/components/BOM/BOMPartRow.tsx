@@ -23,7 +23,6 @@ import QuantityControl from './QuantityControl';
 interface BOMItem {
   id: string;
   name: string;
-  partId: string;
   description: string;
   category: string;
   quantity: number;
@@ -42,10 +41,10 @@ interface BOMItem {
 interface BOMPartRowProps {
   part: BOMItem;
   onClick: () => void;
-  onQuantityChange?: (partId: string, newQuantity: number) => void;
+  onQuantityChange?: (itemId: string, newQuantity: number) => void;
   allVendors?: Array<{ name: string; price: number; leadTime: string; availability: string }>;
-  onDelete?: (partId: string) => void;
-  onStatusChange?: (partId: string, newStatus: string) => void;
+  onDelete?: (itemId: string) => void;
+  onStatusChange?: (itemId: string, newStatus: string) => void;
 }
 
 const BOMPartRow = ({ part, onClick, onQuantityChange, allVendors = [], onDelete, onStatusChange }: BOMPartRowProps) => {
@@ -122,7 +121,6 @@ const BOMPartRow = ({ part, onClick, onQuantityChange, allVendors = [], onDelete
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <h4 className="font-medium text-gray-900">{part.name}</h4>
-                <Badge variant="outline" className="text-xs">{part.partId}</Badge>
               </div>
               
               <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">

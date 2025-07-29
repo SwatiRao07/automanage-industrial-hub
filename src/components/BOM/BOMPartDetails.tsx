@@ -17,7 +17,6 @@ interface DocumentInfo {
 interface BOMItem {
   id: string;
   name: string;
-  partId: string;
   description: string;
   category: string;
   quantity: number;
@@ -258,7 +257,6 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
           <div className="flex-1">
             <CardTitle className="text-lg">{partState?.name}</CardTitle>
             <div className="flex items-center gap-2 mt-1">
-              <Badge variant="outline">{partState?.partId}</Badge>
               <Badge className={getStatusColor(partState?.status || '')}>
                 {partState?.status.replace('-', ' ').toUpperCase()}
               </Badge>
