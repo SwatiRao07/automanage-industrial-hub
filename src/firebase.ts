@@ -1,7 +1,7 @@
 // src/firebase.ts
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth, signInAnonymously } from "firebase/auth";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 // ✅ Your Firebase Config (use the one you posted)
 const firebaseConfig = {
@@ -21,7 +21,10 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-// ✅ Sign in user anonymously on load
-signInAnonymously(auth).catch((error) => {
-  console.error("Firebase Auth failed:", error);
+// ✅ Google Auth Provider setup
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account', // Forces account selection
+  access_type: 'offline',
+  include_granted_scopes: 'true'
 });

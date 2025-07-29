@@ -13,9 +13,10 @@ import DashboardHeader from '@/components/DashboardHeader';
 import MetricCard from '@/components/MetricCard';
 import ProjectCard from '@/components/ProjectCard';
 import RecentActivity from '@/components/RecentActivity';
+import { useSidebar } from '../App';
 
 const Index = () => {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { collapsed, toggle } = useSidebar();
 
   const mockProjects = [
     {
@@ -59,11 +60,11 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <Sidebar 
-        collapsed={sidebarCollapsed} 
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)} 
+        collapsed={collapsed} 
+        onToggle={toggle} 
       />
       
-      <div className={`flex-1 flex flex-col ${sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
+      <div className={`flex-1 flex flex-col ${collapsed ? 'ml-16' : 'ml-64'}`}>
         <DashboardHeader />
         
         <main className="flex-1 p-6">
