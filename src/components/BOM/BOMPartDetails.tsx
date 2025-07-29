@@ -83,7 +83,6 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
   const [bank, setBank] = useState('');
   const [po, setPo] = useState('');
   const [vendorName, setVendorName] = useState('');
-  const [vendorLeadTime, setVendorLeadTime] = useState('');
   const [vendorCost, setVendorCost] = useState('');
   // Update Vendor type to include documents
   type Vendor = {
@@ -186,14 +185,12 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
       {
         name: vendorName,
         price: vendorCost ? Number(vendorCost) : undefined,
-        leadTime: vendorLeadTime,
         qty: 1,
         documents: addVendorDocs,
       },
     ];
     updateVendors(newVendors);
     setVendorName('');
-    setVendorLeadTime('');
     setVendorCost('');
     setAddVendorDocs([]);
     setAddVendorOpen(false);
@@ -206,7 +203,6 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
     const v = vendors[idx];
     setEditVendorName(v.name || '');
     setEditPan('price' in v ? v.price : '');
-    setEditGst('leadTime' in v ? v.leadTime : '');
     setEditVendorDocs(Array.isArray(v.documents) ? v.documents : []);
   };
   // Add state for confirming vendor doc deletion
@@ -225,7 +221,7 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
       }
     });
     // Save vendors and update part documents if changed
-    updateVendors(vendors.map((v, i) => i === editVendorIdx ? { ...v, name: editVendorName, price: Number(editPan), leadTime: editGst, documents: editVendorDocs.map(d => ({ name: d.name, url: d.url })) } : v));
+    updateVendors(vendors.map((v, i) => i === editVendorIdx ? { ...v, name: editVendorName, price: Number(editPan), documents: editVendorDocs.map(d => ({ name: d.name, url: d.url })) } : v));
     if (updatedPartDocs !== (partState?.documents || [])) {
       setPartState(prev => prev ? { ...prev, documents: updatedPartDocs } : prev);
       if (typeof onUpdatePart === 'function' && partState) {
@@ -493,8 +489,6 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                 <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow z-10">
                   <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => { setSortType('price-asc'); setShowSortDropdown(false); }}>Price: Low to High</button>
                   <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => { setSortType('price-desc'); setShowSortDropdown(false); }}>Price: High to Low</button>
-                  <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => { setSortType('leadtime-asc'); setShowSortDropdown(false); }}>Delivery: Fastest First</button>
-                  <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100" onClick={() => { setSortType('leadtime-desc'); setShowSortDropdown(false); }}>Delivery: Slowest First</button>
               </div>
             )}
           </div>
@@ -504,17 +498,12 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
             {vendors.sort((a, b) => {
               const priceA = typeof a.price === 'number' ? a.price : Number(a.price) || 0;
               const priceB = typeof b.price === 'number' ? b.price : Number(b.price) || 0;
-              const leadA = typeof a.leadTime === 'string' ? parseInt(a.leadTime) || 0 : 0;
-              const leadB = typeof b.leadTime === 'string' ? parseInt(b.leadTime) || 0 : 0;
               if (sortType === 'price-asc') return priceA - priceB;
               if (sortType === 'price-desc') return priceB - priceA;
-              if (sortType === 'leadtime-asc') return leadA - leadB;
-              if (sortType === 'leadtime-desc') return leadB - leadA;
               return 0;
             }).map((vendor, index) => {
               // Ensure correct types and defaults
               const price = 'price' in vendor ? vendor.price : '';
-              const leadTime = 'leadTime' in vendor ? vendor.leadTime : '';
               const availability = 'availability' in vendor ? vendor.availability : 'In Stock';
               const qty = 'qty' in vendor ? vendor.qty : 1;
               return (
@@ -529,7 +518,6 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                   </div>
                   <div className="flex items-center gap-6 text-gray-700 mb-2">
                     <span className="flex items-center gap-1 text-sm"><span className="text-base">₹</span>{price}</span>
-                    <span className="flex items-center gap-1 text-sm"><Clock size={16} />{leadTime}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="ml-auto flex items-center gap-2">
@@ -600,10 +588,6 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                   <div>
                     <label className="block text-sm font-medium mb-1">Price per unit</label>
                     <input className="w-full border rounded p-2" type="number" min="0" value={editPan} onChange={e => setEditPan(e.target.value)} placeholder="Enter price per unit" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Lead Time</label>
-                    <input className="w-full border rounded p-2" value={editGst} onChange={e => setEditGst(e.target.value)} placeholder="Enter lead time" />
                   </div>
                 </form>
                 <div className="mt-3 text-left">
@@ -696,10 +680,6 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                   <label className="block text-sm font-medium mb-1">Price per unit</label>
                   <input className="w-full border rounded p-2" type="number" min="0" value={vendorCost} onChange={e => setVendorCost(e.target.value)} placeholder="Enter price per unit" />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Lead Time</label>
-                  <input className="w-full border rounded p-2" value={vendorLeadTime} onChange={e => setVendorLeadTime(e.target.value)} placeholder="Enter lead time" />
-                </div>
               </form>
               <DialogFooter className="mt-4 flex gap-2 items-center">
                 <button type="button" className="px-4 py-2 bg-blue-600 text-white rounded" onClick={handleAddVendor} disabled={!vendorName.trim()}>Save</button>
@@ -716,7 +696,7 @@ const BOMPartDetails = ({ part, onClose, onUpdatePart, onDeletePart }: BOMPartDe
                       ]);
                     }
                   }} />
-                  <span className="px-4 py-2 bg-gray-200 text-gray-700 rounded ml-2 inline-block hover:bg-gray-300">Add Documents</span>
+                  <span className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">Add Documents</span>
                 </label>
                 <button type="button" className="px-4 py-2 bg-gray-200 text-gray-700 rounded" onClick={() => { setAddVendorOpen(false); setAddVendorDocs([]); }}>Cancel</button>
               </DialogFooter>
