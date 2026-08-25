@@ -13,7 +13,9 @@ import {
   Loader2,
   Download,
   Mail,
-  Users
+  Users,
+  ClipboardCheck,
+  RotateCcw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +54,9 @@ import {
   sendPurchaseOrder,
   generatePOPDF,
   sendPOEmail,
+  submitPOForApproval,
+  requestPOChanges,
+  notifyPOApproval,
   PurchaseOrder
 } from '@/utils/poFirestore';
 import { billingEntityToCompanySettings, getBillingEntity } from '@/utils/settingsFirestore';
@@ -107,6 +112,11 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
   const [selectedCCStakeholderEmails, setSelectedCCStakeholderEmails] = useState<string[]>([]);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [poToEdit, setPOToEdit] = useState<PurchaseOrder | null>(null);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [changesDialogOpen, setChangesDialogOpen] = useState(false);
+  const [poForChanges, setPOForChanges] = useState<PurchaseOrder | null>(null);
+  const [changesNote, setChangesNote] = useState('');
+  const [requestingChanges, setRequestingChanges] = useState(false);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
 
@@ -119,6 +129,87 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
   const handleEditClick = (po: PurchaseOrder) => {
     setPOToEdit(po);
     setEditDialogOpen(true);
+  };
+
+  const handleSubmitForApproval = async (po: PurchaseOrder) => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    setSubmittingId(po.id);
+    try {
+      await submitPOForApproval(projectId, po.id, user.uid);
+      toast({
+        title: 'Submitted for Approval',
+        description: `PO ${po.poNumber} is now waiting on admin review.`,
+      });
+
+      const project = await getProject(projectId);
+      notifyPOApproval({
+        mode: 'submitted',
+        projectId,
+        projectName: project?.projectName || projectId,
+        poNumber: po.poNumber,
+        vendorName: po.vendorName,
+        totalAmount: po.totalAmount,
+      }).catch((err) => console.warn('[POListSection] Admin notification failed:', err));
+    } catch (error) {
+      console.error('Error submitting PO for approval:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to submit Purchase Order for approval.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmittingId(null);
+    }
+  };
+
+  const handleRequestChangesClick = (po: PurchaseOrder) => {
+    setPOForChanges(po);
+    setChangesNote('');
+    setChangesDialogOpen(true);
+  };
+
+  const handleConfirmRequestChanges = async () => {
+    if (!poForChanges) return;
+    const user = auth.currentUser;
+    if (!user) return;
+
+    setRequestingChanges(true);
+    try {
+      await requestPOChanges(projectId, poForChanges.id, user.uid, changesNote.trim() || undefined);
+      toast({
+        title: 'Changes Requested',
+        description: `PO ${poForChanges.poNumber} has been sent back to draft.`,
+      });
+      setChangesDialogOpen(false);
+
+      if (poForChanges.submittedBy) {
+        const project = await getProject(projectId);
+        notifyPOApproval({
+          mode: 'changes-requested',
+          projectId,
+          projectName: project?.projectName || projectId,
+          poNumber: poForChanges.poNumber,
+          vendorName: poForChanges.vendorName,
+          totalAmount: poForChanges.totalAmount,
+          submitterUid: poForChanges.submittedBy,
+          note: changesNote.trim() || undefined,
+        }).catch((err) => console.warn('[POListSection] Submitter notification failed:', err));
+      }
+
+      setPOForChanges(null);
+      setChangesNote('');
+    } catch (error) {
+      console.error('Error requesting PO changes:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to request changes.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRequestingChanges(false);
+    }
   };
 
   // Subscribe to purchase orders
@@ -156,6 +247,13 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
           <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-300">
             <Edit size={12} className="mr-1" />
             Draft
+          </Badge>
+        );
+      case 'pending-approval':
+        return (
+          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300">
+            <ClipboardCheck size={12} className="mr-1" />
+            Pending Approval
           </Badge>
         );
       case 'sent':
@@ -438,7 +536,7 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
             <Badge variant="outline" className="ml-2">{purchaseOrders.length}</Badge>
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            Purchase orders sent to vendors. Admin users can send draft POs.
+            Purchase orders sent to vendors. Submit a draft for approval, then admins review and send.
           </p>
         </div>
       </div>
@@ -516,17 +614,38 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
                       </DropdownMenuItem>
                     )}
 
-                    {po.status === 'draft' && isAdmin && (
-                      <DropdownMenuItem onClick={() => handleSendClick(po, 'email')}>
-                        <Mail className="mr-2 h-4 w-4" />
-                        Email to Vendor
+                    {po.status === 'draft' && (
+                      <DropdownMenuItem
+                        onClick={() => handleSubmitForApproval(po)}
+                        disabled={submittingId === po.id}
+                      >
+                        {submittingId === po.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <ClipboardCheck className="mr-2 h-4 w-4" />
+                        )}
+                        Submit for Approval
                       </DropdownMenuItem>
                     )}
 
-                    {po.status === 'draft' && isAdmin && (
+                    {po.status === 'pending-approval' && isAdmin && (
+                      <DropdownMenuItem onClick={() => handleSendClick(po, 'email')}>
+                        <Mail className="mr-2 h-4 w-4" />
+                        Approve &amp; Email to Vendor
+                      </DropdownMenuItem>
+                    )}
+
+                    {po.status === 'pending-approval' && isAdmin && (
                       <DropdownMenuItem onClick={() => handleSendClick(po, 'mark')}>
                         <Send className="mr-2 h-4 w-4" />
-                        Mark as Sent
+                        Approve &amp; Mark as Sent
+                      </DropdownMenuItem>
+                    )}
+
+                    {po.status === 'pending-approval' && isAdmin && (
+                      <DropdownMenuItem onClick={() => handleRequestChangesClick(po)}>
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                        Request Changes
                       </DropdownMenuItem>
                     )}
 
@@ -566,6 +685,22 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
                   Created: {formatDate(selectedPO.createdAt)}
                 </span>
               </div>
+
+              {/* Changes Requested - show when admin sent it back to draft */}
+              {selectedPO.status === 'draft' && selectedPO.changesRequestedAt && (
+                <div className="bg-red-50 border border-red-200 rounded p-3 text-sm">
+                  <div className="flex items-center gap-2 text-red-800 font-medium">
+                    <RotateCcw className="h-4 w-4" />
+                    Changes requested
+                  </div>
+                  {selectedPO.changesRequestedNote && (
+                    <div className="text-red-700 mt-1">{selectedPO.changesRequestedNote}</div>
+                  )}
+                  <div className="text-red-600 mt-1">
+                    {formatDate(selectedPO.changesRequestedAt)}
+                  </div>
+                </div>
+              )}
 
               {/* Sent Info - show when PO was sent */}
               {selectedPO.status === 'sent' && selectedPO.sentAt && (
@@ -689,13 +824,13 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
             <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
               Close
             </Button>
-            {selectedPO?.status === 'draft' && isAdmin && (
+            {selectedPO?.status === 'pending-approval' && isAdmin && (
               <Button onClick={() => {
                 setViewDialogOpen(false);
                 handleSendClick(selectedPO);
               }}>
                 <Send className="mr-2 h-4 w-4" />
-                Send PO
+                Approve &amp; Send PO
               </Button>
             )}
           </DialogFooter>
@@ -861,6 +996,47 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
                 )}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Request Changes Dialog */}
+      <Dialog open={changesDialogOpen} onOpenChange={setChangesDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Request Changes</DialogTitle>
+            <DialogDescription>
+              Send PO {poForChanges?.poNumber} back to draft so it can be revised before resubmitting.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 py-2">
+            <Label htmlFor="changesNote">Note (optional)</Label>
+            <Input
+              id="changesNote"
+              value={changesNote}
+              onChange={(e) => setChangesNote(e.target.value)}
+              placeholder="What needs to change?"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChangesDialogOpen(false)} disabled={requestingChanges}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmRequestChanges} disabled={requestingChanges}>
+              {requestingChanges ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending Back...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Request Changes
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

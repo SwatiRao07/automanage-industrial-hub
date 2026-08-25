@@ -89,6 +89,24 @@ const toTimestamp = (date: Date | undefined): Timestamp | undefined => {
   return Timestamp.fromDate(date);
 };
 
+/**
+ * Map a raw Firestore PO document into a PurchaseOrder, converting Timestamps to Dates
+ */
+const mapPODocument = (id: string, data: Record<string, unknown>): PurchaseOrder => {
+  return {
+    ...data,
+    id,
+    poDate: toDate(data.poDate as Timestamp | Date | undefined) || new Date(),
+    createdAt: toDate(data.createdAt as Timestamp | Date | undefined) || new Date(),
+    updatedAt: toDate(data.updatedAt as Timestamp | Date | undefined) || new Date(),
+    expectedDeliveryDate: toDate(data.expectedDeliveryDate as Timestamp | Date | undefined),
+    sentAt: toDate(data.sentAt as Timestamp | Date | undefined),
+    closedAt: toDate(data.closedAt as Timestamp | Date | undefined),
+    submittedForApprovalAt: toDate(data.submittedForApprovalAt as Timestamp | Date | undefined),
+    changesRequestedAt: toDate(data.changesRequestedAt as Timestamp | Date | undefined),
+  } as unknown as PurchaseOrder;
+};
+
 // ============================================
 // PO Collection Reference
 // ============================================
@@ -285,19 +303,7 @@ export const getPurchaseOrders = async (projectId: string): Promise<PurchaseOrde
   const q = query(collectionRef, orderBy("createdAt", "desc"));
   const snapshot = await getDocs(q);
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      ...data,
-      id: doc.id,
-      poDate: toDate(data.poDate) || new Date(),
-      createdAt: toDate(data.createdAt) || new Date(),
-      updatedAt: toDate(data.updatedAt) || new Date(),
-      expectedDeliveryDate: toDate(data.expectedDeliveryDate),
-      sentAt: toDate(data.sentAt),
-      closedAt: toDate(data.closedAt),
-    } as unknown as PurchaseOrder;
-  });
+  return snapshot.docs.map((doc) => mapPODocument(doc.id, doc.data()));
 };
 
 export const getPurchaseOrder = async (projectId: string, poId: string): Promise<PurchaseOrder | null> => {
@@ -308,17 +314,7 @@ export const getPurchaseOrder = async (projectId: string, poId: string): Promise
     return null;
   }
 
-  const data = docSnap.data();
-  return {
-    ...data,
-    id: docSnap.id,
-    poDate: toDate(data.poDate) || new Date(),
-    createdAt: toDate(data.createdAt) || new Date(),
-    updatedAt: toDate(data.updatedAt) || new Date(),
-    expectedDeliveryDate: toDate(data.expectedDeliveryDate),
-    sentAt: toDate(data.sentAt),
-    closedAt: toDate(data.closedAt),
-  } as unknown as PurchaseOrder;
+  return mapPODocument(docSnap.id, docSnap.data());
 };
 
 // ============================================
@@ -333,19 +329,7 @@ export const subscribeToPurchaseOrders = (
   const q = query(collectionRef, orderBy("createdAt", "desc"));
 
   return onSnapshot(q, (snapshot) => {
-    const pos = snapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        ...data,
-        id: doc.id,
-        poDate: toDate(data.poDate) || new Date(),
-        createdAt: toDate(data.createdAt) || new Date(),
-        updatedAt: toDate(data.updatedAt) || new Date(),
-        expectedDeliveryDate: toDate(data.expectedDeliveryDate),
-        sentAt: toDate(data.sentAt),
-        closedAt: toDate(data.closedAt),
-      } as unknown as PurchaseOrder;
-    });
+    const pos = snapshot.docs.map((doc) => mapPODocument(doc.id, doc.data()));
     callback(pos);
   });
 };
@@ -404,6 +388,69 @@ export const updatePurchaseOrder = async (
 };
 
 // ============================================
+// Submit Purchase Order for Approval
+// ============================================
+
+export const submitPOForApproval = async (
+  projectId: string,
+  poId: string,
+  submittedBy: string
+): Promise<void> => {
+  const po = await getPurchaseOrder(projectId, poId);
+  if (!po) {
+    throw new Error("Purchase Order not found");
+  }
+
+  if (po.status !== 'draft') {
+    throw new Error("Only draft POs can be submitted for approval");
+  }
+
+  const docRef = doc(db, "projects", projectId, "purchaseOrders", poId);
+  const now = new Date();
+
+  await updateDoc(docRef, {
+    status: 'pending-approval',
+    submittedForApprovalAt: Timestamp.fromDate(now),
+    submittedBy,
+    changesRequestedAt: null,
+    changesRequestedBy: null,
+    changesRequestedNote: null,
+    updatedAt: Timestamp.fromDate(now),
+  });
+};
+
+// ============================================
+// Request Changes on a Purchase Order (Admin Only)
+// ============================================
+
+export const requestPOChanges = async (
+  projectId: string,
+  poId: string,
+  requestedBy: string,
+  note?: string
+): Promise<void> => {
+  const po = await getPurchaseOrder(projectId, poId);
+  if (!po) {
+    throw new Error("Purchase Order not found");
+  }
+
+  if (po.status !== 'pending-approval') {
+    throw new Error("Only POs pending approval can have changes requested");
+  }
+
+  const docRef = doc(db, "projects", projectId, "purchaseOrders", poId);
+  const now = new Date();
+
+  await updateDoc(docRef, {
+    status: 'draft',
+    changesRequestedAt: Timestamp.fromDate(now),
+    changesRequestedBy: requestedBy,
+    changesRequestedNote: note || null,
+    updatedAt: Timestamp.fromDate(now),
+  });
+};
+
+// ============================================
 // Send Purchase Order (Admin Only)
 // ============================================
 
@@ -426,8 +473,8 @@ export const sendPurchaseOrder = async (
     throw new Error("Purchase Order not found");
   }
 
-  if (po.status !== 'draft') {
-    throw new Error("Only draft POs can be sent");
+  if (po.status !== 'pending-approval') {
+    throw new Error("Only POs pending approval can be sent");
   }
 
   const now = new Date();
@@ -476,19 +523,7 @@ export const getPurchaseOrdersByVendor = async (
   );
   const snapshot = await getDocs(q);
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      ...data,
-      id: doc.id,
-      poDate: toDate(data.poDate) || new Date(),
-      createdAt: toDate(data.createdAt) || new Date(),
-      updatedAt: toDate(data.updatedAt) || new Date(),
-      expectedDeliveryDate: toDate(data.expectedDeliveryDate),
-      sentAt: toDate(data.sentAt),
-      closedAt: toDate(data.closedAt),
-    } as unknown as PurchaseOrder;
-  });
+  return snapshot.docs.map((doc) => mapPODocument(doc.id, doc.data()));
 };
 
 // ============================================
@@ -507,19 +542,7 @@ export const getPurchaseOrdersByStatus = async (
   );
   const snapshot = await getDocs(q);
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      ...data,
-      id: doc.id,
-      poDate: toDate(data.poDate) || new Date(),
-      createdAt: toDate(data.createdAt) || new Date(),
-      updatedAt: toDate(data.updatedAt) || new Date(),
-      expectedDeliveryDate: toDate(data.expectedDeliveryDate),
-      sentAt: toDate(data.sentAt),
-      closedAt: toDate(data.closedAt),
-    } as unknown as PurchaseOrder;
-  });
+  return snapshot.docs.map((doc) => mapPODocument(doc.id, doc.data()));
 };
 
 // ============================================
@@ -688,4 +711,29 @@ export const sendPOEmail = async (
 
   const result = await sendPurchaseOrderFunction(input);
   return result.data;
+};
+
+// ============================================
+// Notify Admins / Submitter of Approval Events
+// ============================================
+
+export interface NotifyPOApprovalInput {
+  mode: 'submitted' | 'changes-requested';
+  projectId: string;
+  projectName: string;
+  poNumber: string;
+  vendorName: string;
+  totalAmount: number;
+  // Required for mode: 'changes-requested'
+  submitterUid?: string;
+  note?: string;
+}
+
+/**
+ * Best-effort email notification for the PO approval workflow.
+ * Failures are swallowed by the caller (UI) - the status change already succeeded.
+ */
+export const notifyPOApproval = async (input: NotifyPOApprovalInput): Promise<void> => {
+  const notifyFunction = httpsCallable(functions, 'notifyPOApproval');
+  await notifyFunction(input);
 };

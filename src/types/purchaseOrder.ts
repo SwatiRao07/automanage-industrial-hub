@@ -5,8 +5,9 @@
 // ============================================
 
 export type POStatus =
-  | 'draft'              // Created but not sent
-  | 'sent'               // Sent to vendor
+  | 'draft'              // Created but not submitted
+  | 'pending-approval'   // Submitted by engineer, awaiting admin review
+  | 'sent'               // Approved by admin and sent to vendor
   | 'acknowledged'       // Vendor acknowledged receipt
   | 'partially-received' // Some items received
   | 'completed'          // All items received
@@ -108,8 +109,15 @@ export interface PurchaseOrder {
   poDate: Date;
   expectedDeliveryDate?: Date;
 
-  // Status flow: draft → sent → acknowledged → completed
+  // Status flow: draft → pending-approval → sent → acknowledged → completed
   status: POStatus;
+
+  // Approval workflow tracking
+  submittedForApprovalAt?: Date;
+  submittedBy?: string;          // User ID who submitted for approval
+  changesRequestedAt?: Date;
+  changesRequestedBy?: string;   // Admin user ID who requested changes
+  changesRequestedNote?: string; // Optional note explaining what to fix
 
   // Admin send tracking
   sentAt?: Date;
@@ -238,6 +246,7 @@ export const determineTaxType = (
 
 export const PO_STATUS_LABELS: Record<POStatus, string> = {
   draft: 'Draft',
+  'pending-approval': 'Pending Approval',
   sent: 'Sent',
   acknowledged: 'Acknowledged',
   'partially-received': 'Partially Received',
@@ -247,6 +256,7 @@ export const PO_STATUS_LABELS: Record<POStatus, string> = {
 
 export const PO_STATUS_COLORS: Record<POStatus, string> = {
   draft: 'bg-gray-100 text-gray-800',
+  'pending-approval': 'bg-amber-100 text-amber-800',
   sent: 'bg-blue-100 text-blue-800',
   acknowledged: 'bg-purple-100 text-purple-800',
   'partially-received': 'bg-yellow-100 text-yellow-800',

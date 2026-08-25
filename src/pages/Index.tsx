@@ -24,6 +24,7 @@ import {
   FileText,
   Receipt,
   UserCheck,
+  ShoppingCart,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { doc, getDoc, collection, getDocs, query, orderBy, limit } from "firebase/firestore";
@@ -32,7 +33,9 @@ import { getBOMData, type ProjectMember } from "@/utils/projectFirestore";
 import { getProjectCosts } from "@/utils/pulseProxyFirestore";
 import { computeDashboardCostTotals, type DashboardCostTotals } from "@/utils/dashboardCostTotals";
 import { extractPendingClaims, type PendingClaimsSummary, type ProjectVisits } from "@/utils/pendingApprovals";
+import { extractPendingPOApprovals, type PendingPOApprovalsSummary, type ProjectPOs } from "@/utils/pendingPOApprovals";
 import { getOverheads } from "@/utils/overheadFirestore";
+import { getPurchaseOrders } from "@/utils/poFirestore";
 import { weekRangeFromDate } from "@/components/CostAnalysis/WeekNavigator";
 import { fetchPendingUsers } from "@/utils/userService";
 
@@ -60,6 +63,11 @@ const KPI = () => {
     count: 0,
     totalAmount: 0,
   });
+  const [pendingPOApprovals, setPendingPOApprovals] = useState<PendingPOApprovalsSummary>({
+    approvals: [],
+    count: 0,
+    totalAmount: 0,
+  });
   const [pendingUsers, setPendingUsers] = useState<{ id?: string; uid?: string; email?: string; displayName?: string }[]>([]);
 
   useEffect(() => {
@@ -75,6 +83,7 @@ const KPI = () => {
         const projectsData = [];
         let totalBOMParts = 0;
         const projectVisits: ProjectVisits[] = [];
+        const projectPOs: ProjectPOs[] = [];
 
         for (const projectDoc of projectsSnapshot.docs) {
           const projectData = { id: projectDoc.id, ...projectDoc.data() } as {
@@ -107,6 +116,18 @@ const KPI = () => {
           } catch (error) {
             console.log(`No overheads data for project ${projectDoc.id}`);
           }
+
+          // Get purchase orders for pending-approval detection
+          try {
+            const purchaseOrders = await getPurchaseOrders(projectDoc.id);
+            projectPOs.push({
+              projectId: projectDoc.id,
+              projectName: projectData.projectName || projectDoc.id,
+              purchaseOrders,
+            });
+          } catch (error) {
+            console.log(`No purchase orders for project ${projectDoc.id}`);
+          }
         }
 
         setProjects(projectsData);
@@ -129,6 +150,7 @@ const KPI = () => {
         setTotalParts(totalBOMParts);
 
         setPendingClaims(extractPendingClaims(projectVisits));
+        setPendingPOApprovals(extractPendingPOApprovals(projectPOs));
 
         // Fetch vendor count
         const vendorsRef = collection(db, 'vendors');
@@ -350,7 +372,7 @@ const KPI = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {pendingClaims.count === 0 && pendingUsers.length === 0 ? (
+              {pendingClaims.count === 0 && pendingPOApprovals.count === 0 && pendingUsers.length === 0 ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-6 justify-center">
                   <CheckCircle className="h-4 w-4 text-green-500" />
                   All caught up
@@ -377,6 +399,32 @@ const KPI = () => {
                           >
                             <span className="truncate">{claim.projectName} — {claim.claimantName}</span>
                             <span className="font-medium ml-2 shrink-0">{formatCurrency(claim.amount)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {pendingPOApprovals.count > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <ShoppingCart className="h-4 w-4 text-amber-600" />
+                          POs Pending Approval
+                        </div>
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700">
+                          {pendingPOApprovals.count} · {formatCurrency(pendingPOApprovals.totalAmount)}
+                        </Badge>
+                      </div>
+                      <div className="space-y-1">
+                        {pendingPOApprovals.approvals.map(approval => (
+                          <button
+                            key={approval.poId}
+                            onClick={() => navigate(`/project/${approval.projectId}/bom`)}
+                            className="w-full flex items-center justify-between text-sm px-2 py-1.5 rounded hover:bg-muted/50 text-left"
+                          >
+                            <span className="truncate">{approval.projectName} — {approval.poNumber} ({approval.vendorName})</span>
+                            <span className="font-medium ml-2 shrink-0">{formatCurrency(approval.amount)}</span>
                           </button>
                         ))}
                       </div>

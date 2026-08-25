@@ -1095,6 +1095,132 @@ exports.notifyExpenseApproval = onCall(
   }
 );
 
+// ==================== PURCHASE ORDER APPROVAL NOTIFICATIONS ====================
+
+// Notify on PO approval workflow events
+// mode='submitted'         → email to all admins (engineer submitted a PO for approval)
+// mode='changes-requested' → email to the submitter (admin sent it back for changes)
+exports.notifyPOApproval = onCall(
+  { secrets: [resendApiKey] },
+  async (request) => {
+    const { auth, data } = request;
+    if (!auth) throw new Error('Authentication required');
+
+    const { mode, projectId, projectName, poNumber, vendorName, totalAmount, submitterUid, note } = data;
+    const resend = new Resend(getResendApiKey());
+    const FROM = 'BOM Tracker <info@qualitastech.com>';
+
+    const formatINR = (n) => `₹${Math.round(n || 0).toLocaleString('en-IN')}`;
+    const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    const poRows = [
+      `<tr><td style="padding:6px 0;color:#666;width:130px;vertical-align:top;">Project</td><td style="padding:6px 0;font-weight:600;">${esc(projectName)}</td></tr>`,
+      `<tr><td style="padding:6px 0;color:#666;vertical-align:top;">PO Number</td><td style="padding:6px 0;">${esc(poNumber)}</td></tr>`,
+      `<tr><td style="padding:6px 0;color:#666;vertical-align:top;">Vendor</td><td style="padding:6px 0;">${esc(vendorName)}</td></tr>`,
+      `<tr><td style="padding:6px 0;color:#666;vertical-align:top;">Amount</td><td style="padding:6px 0;font-weight:700;font-size:17px;color:#0066cc;">${formatINR(totalAmount)}</td></tr>`,
+    ].join('');
+
+    const poSummary = `<table style="width:100%;font-size:14px;border-collapse:collapse;margin:16px 0;">${poRows}</table>`;
+
+    const footer = `
+      <div style="padding:16px 28px;background:#f8f9fa;border-top:1px solid #eee;font-size:12px;color:#888;text-align:center;">
+        BOM Tracker — Qualitas Technologies Pvt Ltd
+      </div>`;
+
+    const projectUrl = `https://visionbomtracker.web.app/project/${esc(projectId)}/bom`;
+    const ctaBtn = (label) =>
+      `<a href="${projectUrl}" style="display:inline-block;margin-top:16px;padding:10px 22px;background:#0066cc;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">${label} →</a>`;
+
+    // ── mode: submitted ──────────────────────────────────────────────
+    if (mode === 'submitted') {
+      const allUsers = await admin.auth().listUsers(1000);
+      const adminEmails = allUsers.users
+        .filter(u => u.customClaims?.role === 'admin' && u.customClaims?.status === 'approved' && u.email)
+        .map(u => u.email);
+
+      if (adminEmails.length === 0) {
+        logger.warn('[notifyPOApproval] No admin emails found');
+        return { success: false, reason: 'no-admins' };
+      }
+
+      const submitter = await admin.auth().getUser(auth.uid);
+      const submitterName = esc(submitter.displayName || submitter.email || 'A team member');
+
+      const html = `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#333;margin:0;padding:0;background:#f4f4f4;">
+<div style="max-width:600px;margin:24px auto;background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);overflow:hidden;">
+  <div style="background:linear-gradient(135deg,#f59e0b,#d97706);padding:28px 32px;">
+    <h1 style="margin:0;color:#fff;font-size:22px;">PO Approval Required</h1>
+    <p style="margin:8px 0 0;color:rgba(255,255,255,.9);font-size:14px;">${submitterName} has submitted a purchase order for review</p>
+  </div>
+  <div style="padding:28px 32px;">${poSummary}
+    <p style="color:#666;font-size:14px;margin:20px 0 0;">Log in to BOM Tracker to review and send this PO, or request changes.</p>
+    ${ctaBtn('Review PO')}
+  </div>${footer}
+</div></body></html>`;
+
+      await resend.emails.send({
+        from: FROM,
+        to: adminEmails,
+        subject: `PO Approval Required — ${poNumber} (${formatINR(totalAmount)})`,
+        html,
+      });
+
+      logger.info('[notifyPOApproval] Submitted', { adminEmails, projectId, poNumber });
+      return { success: true, sent: adminEmails.length };
+    }
+
+    // ── mode: changes-requested ─────────────────────────────────────
+    if (mode === 'changes-requested') {
+      // Verify caller is an admin — prevents non-admins from sending fake changes-requested emails
+      const callerRecord = await admin.auth().getUser(auth.uid);
+      const callerClaims = callerRecord.customClaims || {};
+      if (callerClaims.role !== 'admin' || callerClaims.status !== 'approved') {
+        throw new Error('Admin privileges required');
+      }
+
+      if (!submitterUid) throw new Error('submitterUid required');
+
+      const submitter = await admin.auth().getUser(submitterUid);
+      if (!submitter.email) {
+        logger.warn('[notifyPOApproval] Submitter has no email', { submitterUid });
+        return { success: false, reason: 'no-submitter-email' };
+      }
+
+      const approver = await admin.auth().getUser(auth.uid);
+      const approverName = esc(approver.displayName || approver.email || 'An admin');
+
+      const html = `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#333;margin:0;padding:0;background:#f4f4f4;">
+<div style="max-width:600px;margin:24px auto;background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);overflow:hidden;">
+  <div style="background:#dc2626;padding:28px 32px;">
+    <h1 style="margin:0;color:#fff;font-size:22px;">Changes Requested</h1>
+    <p style="margin:8px 0 0;color:rgba(255,255,255,.9);font-size:14px;">${approverName} has requested changes to your purchase order</p>
+  </div>
+  <div style="padding:28px 32px;">
+    ${note ? `<div style="background:#fef2f2;border:1px solid #dc262644;border-radius:6px;padding:10px 16px;margin-bottom:20px;">
+      <p style="margin:0;font-weight:600;color:#dc2626;">Note:</p>
+      <p style="margin:4px 0 0;color:#333;">${esc(note)}</p>
+    </div>` : ''}
+    ${poSummary}
+    <p style="color:#666;font-size:14px;margin:20px 0 0;">The PO has been reverted to draft. Please make the requested changes and resubmit for approval.</p>
+    ${ctaBtn('Open PO')}
+  </div>${footer}
+</div></body></html>`;
+
+      await resend.emails.send({
+        from: FROM,
+        to: submitter.email,
+        subject: `Changes Requested — PO ${poNumber}`,
+        html,
+      });
+
+      logger.info('[notifyPOApproval] Changes requested', { submitterEmail: submitter.email, projectId, poNumber });
+      return { success: true };
+    }
+
+    throw new Error(`Invalid mode: ${mode}`);
+  }
+);
+
 // Extract text from PDF quotation
 // This function downloads a PDF from a URL and extracts its text content
 // Note: pdfParse is already imported at the top of the file
