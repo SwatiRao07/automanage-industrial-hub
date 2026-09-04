@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   FileText,
   Trash2,
@@ -113,12 +114,35 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [poToEdit, setPOToEdit] = useState<PurchaseOrder | null>(null);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  const [poToSubmit, setPOToSubmit] = useState<PurchaseOrder | null>(null);
   const [changesDialogOpen, setChangesDialogOpen] = useState(false);
   const [poForChanges, setPOForChanges] = useState<PurchaseOrder | null>(null);
   const [changesNote, setChangesNote] = useState('');
   const [requestingChanges, setRequestingChanges] = useState(false);
   const { toast } = useToast();
   const { isAdmin } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep-link support: a "PO Approval Required" email links to ?tab=documents&po=<id>
+  // so the reader lands directly on the PO instead of a generic project page.
+  useEffect(() => {
+    if (loading) return;
+    const focusPOId = searchParams.get('po');
+    if (!focusPOId) return;
+
+    const match = purchaseOrders.find((p) => p.id === focusPOId);
+    if (match) {
+      setSelectedPO(match);
+      setViewDialogOpen(true);
+    }
+
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('po');
+      return next;
+    }, { replace: true });
+  }, [loading, purchaseOrders, searchParams, setSearchParams]);
 
   const resolvePOCompanySettings = async (po: PurchaseOrder) => {
     const project = po.billingEntityId ? null : await getProject(projectId);
@@ -131,9 +155,15 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
     setEditDialogOpen(true);
   };
 
-  const handleSubmitForApproval = async (po: PurchaseOrder) => {
+  const handleSubmitClick = (po: PurchaseOrder) => {
+    setPOToSubmit(po);
+    setSubmitConfirmOpen(true);
+  };
+
+  const handleConfirmSubmitForApproval = async () => {
+    const po = poToSubmit;
     const user = auth.currentUser;
-    if (!user) return;
+    if (!po || !user) return;
 
     setSubmittingId(po.id);
     try {
@@ -142,12 +172,15 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
         title: 'Submitted for Approval',
         description: `PO ${po.poNumber} is now waiting on admin review.`,
       });
+      setSubmitConfirmOpen(false);
+      setPOToSubmit(null);
 
       const project = await getProject(projectId);
       notifyPOApproval({
         mode: 'submitted',
         projectId,
         projectName: project?.projectName || projectId,
+        poId: po.id,
         poNumber: po.poNumber,
         vendorName: po.vendorName,
         totalAmount: po.totalAmount,
@@ -190,6 +223,7 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
           mode: 'changes-requested',
           projectId,
           projectName: project?.projectName || projectId,
+          poId: poForChanges.id,
           poNumber: poForChanges.poNumber,
           vendorName: poForChanges.vendorName,
           totalAmount: poForChanges.totalAmount,
@@ -616,7 +650,7 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
 
                     {po.status === 'draft' && (
                       <DropdownMenuItem
-                        onClick={() => handleSubmitForApproval(po)}
+                        onClick={() => handleSubmitClick(po)}
                         disabled={submittingId === po.id}
                       >
                         {submittingId === po.id ? (
@@ -836,6 +870,36 @@ const POListSection = ({ projectId, onPOSent }: POListSectionProps) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Submit for Approval Confirmation Dialog */}
+      <AlertDialog open={submitConfirmOpen} onOpenChange={setSubmitConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Submit PO for Approval?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This emails all admins asking them to review PO <strong>{poToSubmit?.poNumber}</strong>{' '}
+              ({poToSubmit ? formatCurrency(poToSubmit.totalAmount) : ''}) for <strong>{poToSubmit?.vendorName}</strong>.
+              You won't be able to edit it while it's pending approval.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submittingId === poToSubmit?.id}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmSubmitForApproval}
+              disabled={submittingId === poToSubmit?.id}
+            >
+              {submittingId === poToSubmit?.id ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit for Approval'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

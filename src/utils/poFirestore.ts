@@ -721,6 +721,7 @@ export interface NotifyPOApprovalInput {
   mode: 'submitted' | 'changes-requested';
   projectId: string;
   projectName: string;
+  poId: string;
   poNumber: string;
   vendorName: string;
   totalAmount: number;

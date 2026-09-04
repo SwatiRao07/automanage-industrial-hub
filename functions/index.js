@@ -1106,7 +1106,7 @@ exports.notifyPOApproval = onCall(
     const { auth, data } = request;
     if (!auth) throw new Error('Authentication required');
 
-    const { mode, projectId, projectName, poNumber, vendorName, totalAmount, submitterUid, note } = data;
+    const { mode, projectId, projectName, poId, poNumber, vendorName, totalAmount, submitterUid, note } = data;
     const resend = new Resend(getResendApiKey());
     const FROM = 'BOM Tracker <info@qualitastech.com>';
 
@@ -1127,9 +1127,13 @@ exports.notifyPOApproval = onCall(
         BOM Tracker — Qualitas Technologies Pvt Ltd
       </div>`;
 
-    const projectUrl = `https://visionbomtracker.web.app/project/${esc(projectId)}/bom`;
+    // Deep-link straight to the Documents tab with this PO pre-opened, instead of
+    // dropping the reader on the generic BOM page where they have to hunt for it.
+    const poDeepLink = poId
+      ? `https://visionbomtracker.web.app/project/${esc(projectId)}/bom?tab=documents&po=${esc(poId)}`
+      : `https://visionbomtracker.web.app/project/${esc(projectId)}/bom?tab=documents`;
     const ctaBtn = (label) =>
-      `<a href="${projectUrl}" style="display:inline-block;margin-top:16px;padding:10px 22px;background:#0066cc;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">${label} →</a>`;
+      `<a href="${poDeepLink}" style="display:inline-block;margin-top:16px;padding:10px 22px;background:#0066cc;color:#fff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:600;">${label} →</a>`;
 
     // ── mode: submitted ──────────────────────────────────────────────
     if (mode === 'submitted') {

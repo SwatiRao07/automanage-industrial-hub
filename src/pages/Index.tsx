@@ -420,7 +420,7 @@ const KPI = () => {
                         {pendingPOApprovals.approvals.map(approval => (
                           <button
                             key={approval.poId}
-                            onClick={() => navigate(`/project/${approval.projectId}/bom`)}
+                            onClick={() => navigate(`/project/${approval.projectId}/bom?tab=documents&po=${approval.poId}`)}
                             className="w-full flex items-center justify-between text-sm px-2 py-1.5 rounded hover:bg-muted/50 text-left"
                           >
                             <span className="truncate">{approval.projectName} — {approval.poNumber} ({approval.vendorName})</span>
