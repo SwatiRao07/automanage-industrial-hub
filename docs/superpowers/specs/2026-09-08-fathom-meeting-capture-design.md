@@ -1,7 +1,7 @@
 # Fathom Meeting Capture (Communications Tracking, Sub-project 1 of 2)
 
 ## Status
-Draft — pending user review
+Approved — ready for implementation planning
 
 ## Context
 
@@ -44,7 +44,7 @@ Firestore can't efficiently ask "which project has stakeholder X" across all pro
 
 `stakeholderIndex/{lowercasedEmail}` → `{ projectIds: string[] }`
 
-Kept in sync at the point stakeholders already change today: `addExternalRecipient` / `removeExternalRecipient` (and the equivalent add/remove for `members`) in `src/utils/projectFirestore.ts` gain a paired write to this index (add the project id to the doc for that email; remove it, deleting the doc if the array empties). This is the only change to existing stakeholder code in this spec — no UI change, no change to what a stakeholder *is*.
+Kept in sync by a new Firestore trigger, `syncStakeholderIndex` (`onDocumentWritten` on `projects/{projectId}`, same mechanism `onBOMUpdate` already uses for the BOM subcollection). On every project write it diffs the before/after email sets (`members[].email` + `externalRecipients[].email`, lowercased) and applies the added/removed emails to `stakeholderIndex` in a batch. This is server-side and automatic — no change to `addProjectMember`/`removeProjectMember`/`addExternalRecipient`/`removeExternalRecipient` in `src/utils/projectFirestore.ts`, no new client Firestore-security-rule surface, and no risk of the index drifting if a call site forgets a paired write (the trigger fires on the underlying doc write regardless of which function made it).
 
 On webhook receipt: look up every attendee email in `stakeholderIndex` (parallel `get()`s, cheap even for a large attendee list). Union the resulting project ids:
 - **Exactly one project:** the meeting is attached there directly.
@@ -74,13 +74,13 @@ interface ProjectMeeting {
 ### 4. UI
 
 - New "Meetings" sub-tab on the project BOM page (alongside the existing Documents tab pattern), listing `projects/{id}/meetings` newest-first: title, date, attendees, summary snippet, "View recording" link out to Fathom.
-- A small "Unassigned Meetings" inbox, visible to admins, listing `unassignedMeetings` with a project picker to resolve each one (or a "discard" action for meetings that genuinely aren't project-related, e.g. internal-only calls with no external stakeholder). Placement: a card on the KPI dashboard (`Index.tsx`) next to the existing "Needs Attention" panel, or a Settings sub-tab — open question, see below.
+- A small "Unassigned Meetings" inbox, visible to admins, listing `unassignedMeetings` with a project picker to resolve each one (or a "discard" action for meetings that genuinely aren't project-related, e.g. internal-only calls with no external stakeholder). Placement: a card on the KPI dashboard (`Index.tsx`) next to the existing "Needs Attention" panel — same "surface what needs action" spot as pending PO/expense approvals.
 
 ### 5. Setup (operational, not code)
 
 Generate a Fathom API key/webhook, point its destination URL at the deployed `fathomMeetingWebhook`, store the signing secret as a Firebase Function secret (`firebase functions:secrets:set`). This is independent of and does not touch Pulse's own (still-inactive) Fathom webhook — the same Fathom account can have multiple webhook destinations.
 
-## Open questions
+## Decisions (resolved during self-review)
 
-1. **Unassigned-meetings inbox placement** — KPI dashboard card vs. a dedicated Settings/admin page. Leaning dashboard card since that's already the "needs action" surface (`Index.tsx`'s existing pending-approvals panel), but want confirmation.
-2. **Who can see a project's Meetings tab** — same access control as the rest of the project (existing member/role gate), or restricted further (e.g. admins only, since meeting summaries may contain sensitive discussion)? Assumed same as project access unless told otherwise.
+1. **Unassigned-meetings inbox placement** — KPI dashboard card, as above.
+2. **Who can see a project's Meetings tab** — same access control as the rest of the project (existing member/role gate). No new permission tier; consistent with how Documents/BOM data is already scoped.
