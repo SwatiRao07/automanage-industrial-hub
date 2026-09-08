@@ -50,6 +50,8 @@ On webhook receipt: look up every attendee email in `stakeholderIndex` (parallel
 - **Exactly one project:** the meeting is attached there directly.
 - **Zero or multiple projects:** the meeting goes to `unassignedMeetings/{id}` for manual triage (mirrors Pulse's "Pipeline inbox" pattern) — never guessed automatically. No LLM fallback in this pass (Pulse needs one because it's matching against open-ended deal names; BOM-Tracker's stakeholder list is an exact, curated email set, so an index hit is either right or absent).
 
+**Amendment (post-implementation, before deploy):** a project's own `members`/`externalRecipients` turned out not to be the *whole* stakeholder picture — Support tickets already resolve `reportedByContactId` against a separate, more mature list: `Client.contacts` (`src/utils/settingsFirestore.ts`), the canonical CRM contact list, scoped to the client rather than the project. A contact that only existed there was invisible to meeting matching. `stakeholderIndex` now also includes every active CRM contact of a project's client (via `project.clientId`), kept in sync by a second trigger, `syncStakeholderIndexFromClient` on `clients/{clientId}` writes, which fans a contact add/remove out to every project of that client. A `projectStakeholderCache/{projectId}` doc holds each project's last-synced full email set so both triggers can diff correctly. `externalRecipients` still exists as a project-specific supplement for attendees who aren't formal CRM contacts. See `functions/fathomMeeting.js` (`computeProjectStakeholderEmails`, `extractClientContactEmails`) and `functions/index.js` (`syncProjectStakeholderIndex`).
+
 ### 3. Data model
 
 `projects/{projectId}/meetings/{meetingId}`:
