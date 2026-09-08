@@ -27,6 +27,12 @@ const {
   prepareSupportFollowUpWithGemini,
   resolveRecipients,
 } = require('./supportEngineerFollowUp');
+const {
+  diffStakeholderEmails,
+  verifySvixSignature,
+  normalizeFathomPayload,
+  collectMatchedProjectIds,
+} = require('./fathomMeeting');
 
 // Use built-in fetch in Node.js 22
 const fetch = globalThis.fetch;
@@ -41,6 +47,7 @@ const openaiApiKeySecret = defineSecret('OPENAI_API_KEY');
 const geminiApiKeySecret = defineSecret('GEMINI_API_KEY');
 const resendApiKey = defineSecret('RESEND_API_KEY');
 const pulseApiKey = defineSecret('PULSE_API_KEY');
+const fathomWebhookSecret = defineSecret('FATHOM_WEBHOOK_SECRET');
 const PULSE_BASE_URL = process.env.PULSE_BASE_URL || 'https://eagle-eye.qualitastech.com/pulse';
 
 // Helper function to get Resend API key (works in both emulator and production)
@@ -3967,6 +3974,211 @@ function numberToWords(num) {
 
   return words + ' Only';
 }
+
+/**
+ * Firestore trigger: keep stakeholderIndex/{email} -> { projectIds } in sync
+ * with each project's members + externalRecipients, so the Fathom webhook can
+ * look up "which project(s) is this attendee a stakeholder of" in O(1) reads
+ * instead of scanning every project. Fires on every write to projects/{projectId};
+ * only the emails that actually changed are touched.
+ */
+exports.syncStakeholderIndex = onDocumentWritten(
+  { document: 'projects/{projectId}' },
+  async (event) => {
+    const projectId = event.params.projectId;
+    const beforeData = event.data?.before?.data();
+    const afterData = event.data?.after?.data();
+
+    const { added, removed } = diffStakeholderEmails(beforeData, afterData);
+    if (added.length === 0 && removed.length === 0) return;
+
+    const db = admin.firestore();
+    const indexCol = db.collection('stakeholderIndex');
+
+    await Promise.all([
+      ...added.map(async (email) => {
+        const ref = indexCol.doc(email);
+        await db.runTransaction(async (tx) => {
+          const snap = await tx.get(ref);
+          const projectIds = new Set(snap.exists ? snap.data().projectIds || [] : []);
+          projectIds.add(projectId);
+          tx.set(ref, { projectIds: [...projectIds] });
+        });
+      }),
+      ...removed.map(async (email) => {
+        const ref = indexCol.doc(email);
+        await db.runTransaction(async (tx) => {
+          const snap = await tx.get(ref);
+          if (!snap.exists) return;
+          const projectIds = new Set(snap.data().projectIds || []);
+          projectIds.delete(projectId);
+          if (projectIds.size === 0) {
+            tx.delete(ref);
+          } else {
+            tx.set(ref, { projectIds: [...projectIds] });
+          }
+        });
+      }),
+    ]);
+
+    logger.info('syncStakeholderIndex updated', { projectId, added, removed });
+  }
+);
+
+/**
+ * Fathom "new meeting content ready" webhook. Verifies the Svix signature,
+ * normalizes the payload, matches attendees against stakeholderIndex, and
+ * files the meeting under the single matched project or into
+ * unassignedMeetings for manual triage. No transcript is stored.
+ */
+exports.fathomMeetingWebhook = onRequest(
+  { secrets: [fathomWebhookSecret] },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).send('Method Not Allowed');
+      return;
+    }
+
+    const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body || {});
+    const valid = verifySvixSignature({
+      id: req.get('webhook-id'),
+      timestamp: req.get('webhook-timestamp'),
+      signatureHeader: req.get('webhook-signature'),
+      rawBody,
+      secret: fathomWebhookSecret.value(),
+    });
+
+    if (!valid) {
+      logger.warn('fathomMeetingWebhook: invalid or missing signature');
+      res.status(401).send('Invalid signature');
+      return;
+    }
+
+    const meeting = normalizeFathomPayload(req.body);
+    if (!meeting.fathomRecordingId) {
+      res.status(400).send('Missing recording id');
+      return;
+    }
+
+    const db = admin.firestore();
+    const dedupRef = db.collection('fathomIngestedMeetings').doc(meeting.fathomRecordingId);
+    const dedupSnap = await dedupRef.get();
+    if (dedupSnap.exists) {
+      logger.info('fathomMeetingWebhook: already ingested, skipping', {
+        fathomRecordingId: meeting.fathomRecordingId,
+      });
+      res.status(200).send('Already ingested');
+      return;
+    }
+
+    const attendeeEmails = meeting.attendees.map((a) => a.email);
+    const lookups = await Promise.all(
+      [...new Set(attendeeEmails.map((e) => String(e || '').toLowerCase().trim()).filter(Boolean))]
+        .map(async (email) => {
+          const snap = await db.collection('stakeholderIndex').doc(email).get();
+          return [email, snap.exists ? snap.data().projectIds || [] : []];
+        })
+    );
+    const emailToProjectIds = Object.fromEntries(lookups);
+    const matchedProjectIds = collectMatchedProjectIds(attendeeEmails, emailToProjectIds);
+
+    const baseDoc = {
+      fathomRecordingId: meeting.fathomRecordingId,
+      title: meeting.title,
+      shareUrl: meeting.shareUrl,
+      startedAt: meeting.startedAt ? new Date(meeting.startedAt) : admin.firestore.FieldValue.serverTimestamp(),
+      endedAt: meeting.endedAt ? new Date(meeting.endedAt) : admin.firestore.FieldValue.serverTimestamp(),
+      hostEmail: meeting.hostEmail,
+      attendees: meeting.attendees,
+      summary: meeting.summary,
+      actionItems: meeting.actionItems,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    if (matchedProjectIds.length === 1) {
+      const [projectId] = matchedProjectIds;
+      await db
+        .collection('projects')
+        .doc(projectId)
+        .collection('meetings')
+        .doc(meeting.fathomRecordingId)
+        .set({ ...baseDoc, matchedStakeholderEmails: attendeeEmails });
+      logger.info('fathomMeetingWebhook: matched to project', { projectId, fathomRecordingId: meeting.fathomRecordingId });
+    } else {
+      await db
+        .collection('unassignedMeetings')
+        .doc(meeting.fathomRecordingId)
+        .set({ ...baseDoc, candidateProjectIds: matchedProjectIds });
+      logger.info('fathomMeetingWebhook: unassigned', {
+        candidateCount: matchedProjectIds.length,
+        fathomRecordingId: meeting.fathomRecordingId,
+      });
+    }
+
+    await dedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp() });
+    res.status(200).send('OK');
+  }
+);
+
+/** Move an unassigned meeting into a project's meetings subcollection. Admin only. */
+exports.assignUnassignedMeeting = onCall(async (request) => {
+  const { auth, data } = request;
+  if (!auth) {
+    throw new Error('Authentication required');
+  }
+  const callerRecord = await admin.auth().getUser(auth.uid);
+  const callerClaims = callerRecord.customClaims || {};
+  if (callerClaims.role !== 'admin' || callerClaims.status !== 'approved') {
+    throw new Error('Admin privileges required');
+  }
+
+  const { meetingId, projectId } = data;
+  if (!meetingId || !projectId) {
+    throw new Error('meetingId and projectId are required');
+  }
+
+  const db = admin.firestore();
+  const unassignedRef = db.collection('unassignedMeetings').doc(meetingId);
+  const snap = await unassignedRef.get();
+  if (!snap.exists) {
+    throw new Error('Meeting not found');
+  }
+  const { candidateProjectIds, ...meetingData } = snap.data();
+  const projectMeetingRef = db.collection('projects').doc(projectId).collection('meetings').doc(meetingId);
+
+  await db.runTransaction(async (tx) => {
+    tx.set(projectMeetingRef, {
+      ...meetingData,
+      matchedStakeholderEmails: meetingData.attendees?.map((a) => a.email) || [],
+    });
+    tx.delete(unassignedRef);
+  });
+
+  logger.info('assignUnassignedMeeting: assigned', { meetingId, projectId, by: auth.uid });
+  return { success: true };
+});
+
+/** Discard an unassigned meeting that isn't actually project-related. Admin only. */
+exports.discardUnassignedMeeting = onCall(async (request) => {
+  const { auth, data } = request;
+  if (!auth) {
+    throw new Error('Authentication required');
+  }
+  const callerRecord = await admin.auth().getUser(auth.uid);
+  const callerClaims = callerRecord.customClaims || {};
+  if (callerClaims.role !== 'admin' || callerClaims.status !== 'approved') {
+    throw new Error('Admin privileges required');
+  }
+
+  const { meetingId } = data;
+  if (!meetingId) {
+    throw new Error('meetingId is required');
+  }
+
+  await admin.firestore().collection('unassignedMeetings').doc(meetingId).delete();
+  logger.info('discardUnassignedMeeting: discarded', { meetingId, by: auth.uid });
+  return { success: true };
+});
 
 /**
  * Generate Purchase Order PDF
