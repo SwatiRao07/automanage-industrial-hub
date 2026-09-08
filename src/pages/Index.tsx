@@ -25,6 +25,7 @@ import {
   Receipt,
   UserCheck,
   ShoppingCart,
+  Video,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { doc, getDoc, collection, getDocs, query, orderBy, limit } from "firebase/firestore";
@@ -38,6 +39,9 @@ import { getOverheads } from "@/utils/overheadFirestore";
 import { getPurchaseOrders } from "@/utils/poFirestore";
 import { weekRangeFromDate } from "@/components/CostAnalysis/WeekNavigator";
 import { fetchPendingUsers } from "@/utils/userService";
+import { getUnassignedMeetings, assignUnassignedMeeting, discardUnassignedMeeting } from "@/utils/meetingFirestore";
+import type { UnassignedMeeting } from "@/types/meeting";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const KPI = () => {
   const navigate = useNavigate();
@@ -69,6 +73,8 @@ const KPI = () => {
     totalAmount: 0,
   });
   const [pendingUsers, setPendingUsers] = useState<{ id?: string; uid?: string; email?: string; displayName?: string }[]>([]);
+  const [unassignedMeetings, setUnassignedMeetings] = useState<UnassignedMeeting[]>([]);
+  const [resolvingMeetingId, setResolvingMeetingId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchKPIData = async () => {
@@ -176,6 +182,14 @@ const KPI = () => {
           console.error('Error fetching pending users:', error);
         }
 
+        // Meetings needing manual project assignment
+        try {
+          const unassigned = await getUnassignedMeetings();
+          setUnassignedMeetings(unassigned);
+        } catch (error) {
+          console.error('Error fetching unassigned meetings:', error);
+        }
+
       } catch (error) {
         console.error('Error fetching KPI data:', error);
       } finally {
@@ -193,6 +207,30 @@ const KPI = () => {
       notation: "compact",
       maximumFractionDigits: 1,
     }).format(amount);
+  };
+
+  const handleAssignMeeting = async (meetingId: string, projectId: string) => {
+    setResolvingMeetingId(meetingId);
+    try {
+      await assignUnassignedMeeting(meetingId, projectId);
+      setUnassignedMeetings((prev) => prev.filter((m) => m.id !== meetingId));
+    } catch (error) {
+      console.error('Error assigning meeting:', error);
+    } finally {
+      setResolvingMeetingId(null);
+    }
+  };
+
+  const handleDiscardMeeting = async (meetingId: string) => {
+    setResolvingMeetingId(meetingId);
+    try {
+      await discardUnassignedMeeting(meetingId);
+      setUnassignedMeetings((prev) => prev.filter((m) => m.id !== meetingId));
+    } catch (error) {
+      console.error('Error discarding meeting:', error);
+    } finally {
+      setResolvingMeetingId(null);
+    }
   };
 
   // Check admin access
@@ -372,7 +410,7 @@ const KPI = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {pendingClaims.count === 0 && pendingPOApprovals.count === 0 && pendingUsers.length === 0 ? (
+              {pendingClaims.count === 0 && pendingPOApprovals.count === 0 && pendingUsers.length === 0 && unassignedMeetings.length === 0 ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-6 justify-center">
                   <CheckCircle className="h-4 w-4 text-green-500" />
                   All caught up
@@ -451,6 +489,52 @@ const KPI = () => {
                           >
                             {u.displayName || u.email}
                           </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {unassignedMeetings.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <Video className="h-4 w-4 text-amber-600" />
+                          Meetings Needing Assignment
+                        </div>
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700">
+                          {unassignedMeetings.length}
+                        </Badge>
+                      </div>
+                      <div className="space-y-2">
+                        {unassignedMeetings.map((meeting) => (
+                          <div key={meeting.id} className="flex items-center gap-2 text-sm px-2 py-1.5 rounded border">
+                            <span className="flex-1 truncate" title={meeting.title}>
+                              {meeting.title || 'Untitled meeting'}
+                            </span>
+                            <Select
+                              disabled={resolvingMeetingId === meeting.id}
+                              onValueChange={(projectId) => handleAssignMeeting(meeting.id, projectId)}
+                            >
+                              <SelectTrigger className="w-40 h-8 text-xs">
+                                <SelectValue placeholder="Assign to..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {projects.map((p) => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    {p.projectName || p.id}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={resolvingMeetingId === meeting.id}
+                              onClick={() => handleDiscardMeeting(meeting.id)}
+                            >
+                              Discard
+                            </Button>
+                          </div>
                         ))}
                       </div>
                     </div>
