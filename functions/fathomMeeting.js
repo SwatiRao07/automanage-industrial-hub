@@ -71,8 +71,52 @@ function normalizeFathomPayload(body) {
   };
 }
 
+/**
+ * Union the project ids matched by a set of attendee emails against a
+ * lowercased-email -> projectIds[] lookup (the shape of the `stakeholderIndex`
+ * collection). Pure — the Firestore reads that build `emailToProjectIds`
+ * happen in index.js.
+ */
+function collectMatchedProjectIds(attendeeEmails, emailToProjectIds) {
+  const matched = new Set();
+  for (const email of attendeeEmails || []) {
+    const key = String(email || '').toLowerCase().trim();
+    if (!key) continue;
+    const ids = emailToProjectIds[key] || [];
+    for (const id of ids) matched.add(id);
+  }
+  return [...matched];
+}
+
+/** Lowercased, deduped set of a project's stakeholder emails (members + externalRecipients). */
+function extractStakeholderEmails(projectData) {
+  const emails = new Set();
+  for (const m of (projectData && projectData.members) || []) {
+    if (m && m.email) emails.add(String(m.email).toLowerCase().trim());
+  }
+  for (const r of (projectData && projectData.externalRecipients) || []) {
+    if (r && r.email) emails.add(String(r.email).toLowerCase().trim());
+  }
+  return emails;
+}
+
+/**
+ * Diff two project docs' stakeholder email sets (before/after a write), for
+ * the syncStakeholderIndex trigger to apply as targeted stakeholderIndex updates.
+ */
+function diffStakeholderEmails(beforeData, afterData) {
+  const before = extractStakeholderEmails(beforeData);
+  const after = extractStakeholderEmails(afterData);
+  const added = [...after].filter((e) => !before.has(e));
+  const removed = [...before].filter((e) => !after.has(e));
+  return { added, removed };
+}
+
 module.exports = {
   verifySvixSignature,
   computeSvixSignature,
   normalizeFathomPayload,
+  collectMatchedProjectIds,
+  extractStakeholderEmails,
+  diffStakeholderEmails,
 };

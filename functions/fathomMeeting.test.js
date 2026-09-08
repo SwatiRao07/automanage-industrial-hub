@@ -5,6 +5,9 @@ const {
   verifySvixSignature,
   computeSvixSignature,
   normalizeFathomPayload,
+  collectMatchedProjectIds,
+  extractStakeholderEmails,
+  diffStakeholderEmails,
 } = require('./fathomMeeting');
 
 test('verifySvixSignature accepts a correctly signed payload', () => {
@@ -93,4 +96,64 @@ test('normalizeFathomPayload handles a missing recording id', () => {
   assert.equal(result.fathomRecordingId, '');
   assert.deepEqual(result.attendees, []);
   assert.deepEqual(result.actionItems, []);
+});
+
+test('collectMatchedProjectIds unions and dedupes projects across attendees', () => {
+  const index = {
+    'jane@clientco.com': ['proj-1'],
+    'bob@clientco.com': ['proj-1', 'proj-2'],
+  };
+  const result = collectMatchedProjectIds(['Jane@ClientCo.com', 'bob@clientco.com'], index);
+  assert.deepEqual([...result].sort(), ['proj-1', 'proj-2']);
+});
+
+test('collectMatchedProjectIds returns empty for no matches', () => {
+  const result = collectMatchedProjectIds(['nobody@nowhere.com'], {});
+  assert.deepEqual(result, []);
+});
+
+test('collectMatchedProjectIds ignores blank/missing emails', () => {
+  const result = collectMatchedProjectIds(['', undefined, null], { 'x@y.com': ['proj-1'] });
+  assert.deepEqual(result, []);
+});
+
+test('extractStakeholderEmails collects lowercased emails from members and externalRecipients', () => {
+  const emails = extractStakeholderEmails({
+    members: [{ email: 'Alice@Qualitastech.com', userId: 'u1' }],
+    externalRecipients: [{ email: 'jane@clientco.com', name: 'Jane' }],
+  });
+  assert.deepEqual([...emails].sort(), ['alice@qualitastech.com', 'jane@clientco.com']);
+});
+
+test('extractStakeholderEmails handles a project with neither field set', () => {
+  assert.deepEqual([...extractStakeholderEmails({})], []);
+  assert.deepEqual([...extractStakeholderEmails(undefined)], []);
+});
+
+test('diffStakeholderEmails reports added and removed emails', () => {
+  const before = { externalRecipients: [{ email: 'jane@clientco.com', name: 'Jane' }] };
+  const after = {
+    externalRecipients: [
+      { email: 'jane@clientco.com', name: 'Jane' },
+      { email: 'bob@clientco.com', name: 'Bob' },
+    ],
+  };
+  const { added, removed } = diffStakeholderEmails(before, after);
+  assert.deepEqual(added, ['bob@clientco.com']);
+  assert.deepEqual(removed, []);
+});
+
+test('diffStakeholderEmails reports removals when a stakeholder is dropped', () => {
+  const before = { members: [{ email: 'alice@qt.com', userId: 'u1' }] };
+  const after = {};
+  const { added, removed } = diffStakeholderEmails(before, after);
+  assert.deepEqual(added, []);
+  assert.deepEqual(removed, ['alice@qt.com']);
+});
+
+test('diffStakeholderEmails is a no-op when nothing changed', () => {
+  const project = { members: [{ email: 'alice@qt.com', userId: 'u1' }] };
+  const { added, removed } = diffStakeholderEmails(project, project);
+  assert.deepEqual(added, []);
+  assert.deepEqual(removed, []);
 });
