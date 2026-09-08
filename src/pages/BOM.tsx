@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { Search, Plus, Download, Filter, X, Upload, Package, FileText, ChevronDown, ChevronUp, Milestone, Brain, UserCheck } from 'lucide-react';
+import { Search, Plus, Download, Filter, X, Upload, Package, FileText, ChevronDown, ChevronUp, Milestone, Brain, UserCheck, Video } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,6 +39,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { getVisibleCategories } from '@/utils/accessControl';
 import ProjectMembersTab from '@/components/Project/ProjectMembersTab';
+import { ProjectMeetingsTab } from '@/components/Project/ProjectMeetingsTab';
 import OverheadsTab from '@/components/BOM/OverheadsTab';
 import ProjectCostBar from '@/components/BOM/ProjectCostBar';
 import { fetchAllUsers } from '@/utils/userService';
@@ -706,7 +707,7 @@ const BOM = () => {
 
             {/* Tab-based Layout */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className={`grid w-full mb-4 ${isPartner ? 'grid-cols-3' : 'grid-cols-6'}`}>
+              <TabsList className={`grid w-full mb-4 ${isPartner ? 'grid-cols-3' : 'grid-cols-7'}`}>
                 <TabsTrigger value="costs" className="flex items-center gap-2">
                   <Package size={16} />
                   Costs
@@ -732,6 +733,12 @@ const BOM = () => {
                     {projectDocuments.length}
                   </Badge>
                 </TabsTrigger>
+                {!isPartner && (
+                  <TabsTrigger value="meetings" className="flex items-center gap-2">
+                    <Video size={16} />
+                    Meetings
+                  </TabsTrigger>
+                )}
                 {!isPartner && (
                   <TabsTrigger value="milestones" className="flex items-center gap-2">
                     <Milestone size={16} />
@@ -1134,6 +1141,11 @@ const BOM = () => {
                     }}
                   />
                 )}
+              </TabsContent>
+
+              {/* Meetings Tab */}
+              <TabsContent value="meetings" className="mt-0">
+                {projectId && <ProjectMeetingsTab projectId={projectId} />}
               </TabsContent>
 
               {/* Context Tab - Project Intelligence for Transcripts */}
