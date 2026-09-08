@@ -88,7 +88,7 @@ function collectMatchedProjectIds(attendeeEmails, emailToProjectIds) {
   return [...matched];
 }
 
-/** Lowercased, deduped set of a project's stakeholder emails (members + externalRecipients). */
+/** Lowercased, deduped set of a project's own stakeholder emails (members + externalRecipients). */
 function extractStakeholderEmails(projectData) {
   const emails = new Set();
   for (const m of (projectData && projectData.members) || []) {
@@ -101,15 +101,49 @@ function extractStakeholderEmails(projectData) {
 }
 
 /**
- * Diff two project docs' stakeholder email sets (before/after a write), for
- * the syncStakeholderIndex trigger to apply as targeted stakeholderIndex updates.
+ * Lowercased, deduped set of a client's active CRM contact emails
+ * (`Client.contacts`, the same list Support tickets already resolve
+ * `reportedByContactId` against). Inactive contacts are excluded, matching
+ * `getClientContacts`'s default in src/utils/settingsFirestore.ts.
+ */
+function extractClientContactEmails(clientData) {
+  const emails = new Set();
+  for (const c of (clientData && clientData.contacts) || []) {
+    if (c && c.email && c.isActive !== false) {
+      emails.add(String(c.email).toLowerCase().trim());
+    }
+  }
+  return emails;
+}
+
+/**
+ * The full stakeholder email set a project should match meetings against:
+ * its own members/externalRecipients, plus every active CRM contact of its
+ * client (so a contact added once in the client CRM is automatically a
+ * stakeholder on every project for that client — no per-project re-entry).
+ */
+function computeProjectStakeholderEmails(projectData, clientData) {
+  const emails = extractStakeholderEmails(projectData);
+  for (const email of extractClientContactEmails(clientData)) {
+    emails.add(email);
+  }
+  return emails;
+}
+
+/** Diff two lowercased email sets, for applying targeted stakeholderIndex updates. */
+function diffEmailSets(beforeEmails, afterEmails) {
+  const added = [...afterEmails].filter((e) => !beforeEmails.has(e));
+  const removed = [...beforeEmails].filter((e) => !afterEmails.has(e));
+  return { added, removed };
+}
+
+/**
+ * Diff two project docs' OWN stakeholder email sets (before/after a write).
+ * Does not account for client CRM contacts — callers syncing the full
+ * picture should use computeProjectStakeholderEmails + diffEmailSets instead.
  */
 function diffStakeholderEmails(beforeData, afterData) {
-  const before = extractStakeholderEmails(beforeData);
-  const after = extractStakeholderEmails(afterData);
-  const added = [...after].filter((e) => !before.has(e));
-  const removed = [...before].filter((e) => !after.has(e));
-  return { added, removed };
+  return diffEmailSets(extractStakeholderEmails(beforeData), extractStakeholderEmails(afterData));
 }
 
 module.exports = {
@@ -118,5 +152,8 @@ module.exports = {
   normalizeFathomPayload,
   collectMatchedProjectIds,
   extractStakeholderEmails,
+  extractClientContactEmails,
+  computeProjectStakeholderEmails,
+  diffEmailSets,
   diffStakeholderEmails,
 };

@@ -7,6 +7,9 @@ const {
   normalizeFathomPayload,
   collectMatchedProjectIds,
   extractStakeholderEmails,
+  extractClientContactEmails,
+  computeProjectStakeholderEmails,
+  diffEmailSets,
   diffStakeholderEmails,
 } = require('./fathomMeeting');
 
@@ -156,4 +159,41 @@ test('diffStakeholderEmails is a no-op when nothing changed', () => {
   const { added, removed } = diffStakeholderEmails(project, project);
   assert.deepEqual(added, []);
   assert.deepEqual(removed, []);
+});
+
+test('extractClientContactEmails collects active contacts, lowercased', () => {
+  const emails = extractClientContactEmails({
+    contacts: [
+      { email: 'Ops@ClientCo.com', isActive: true },
+      { email: 'inactive@clientco.com', isActive: false },
+      { email: 'default-active@clientco.com' },
+    ],
+  });
+  assert.deepEqual([...emails].sort(), ['default-active@clientco.com', 'ops@clientco.com']);
+});
+
+test('extractClientContactEmails handles a client with no contacts', () => {
+  assert.deepEqual([...extractClientContactEmails({})], []);
+  assert.deepEqual([...extractClientContactEmails(undefined)], []);
+});
+
+test('computeProjectStakeholderEmails unions project and client contact emails', () => {
+  const projectData = { externalRecipients: [{ email: 'jane@clientco.com', name: 'Jane' }] };
+  const clientData = { contacts: [{ email: 'bob@clientco.com', isActive: true }] };
+  const emails = computeProjectStakeholderEmails(projectData, clientData);
+  assert.deepEqual([...emails].sort(), ['bob@clientco.com', 'jane@clientco.com']);
+});
+
+test('computeProjectStakeholderEmails works with no client linked', () => {
+  const projectData = { members: [{ email: 'alice@qt.com', userId: 'u1' }] };
+  const emails = computeProjectStakeholderEmails(projectData, undefined);
+  assert.deepEqual([...emails], ['alice@qt.com']);
+});
+
+test('diffEmailSets reports added and removed entries between two sets', () => {
+  const before = new Set(['a@x.com', 'b@x.com']);
+  const after = new Set(['b@x.com', 'c@x.com']);
+  const { added, removed } = diffEmailSets(before, after);
+  assert.deepEqual(added, ['c@x.com']);
+  assert.deepEqual(removed, ['a@x.com']);
 });

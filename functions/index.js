@@ -28,10 +28,12 @@ const {
   resolveRecipients,
 } = require('./supportEngineerFollowUp');
 const {
-  diffStakeholderEmails,
   verifySvixSignature,
   normalizeFathomPayload,
   collectMatchedProjectIds,
+  extractClientContactEmails,
+  computeProjectStakeholderEmails,
+  diffEmailSets,
 } = require('./fathomMeeting');
 
 // Use built-in fetch in Node.js 22
@@ -3976,52 +3978,111 @@ function numberToWords(num) {
 }
 
 /**
+ * Recompute one project's full stakeholder set (its own members/externalRecipients
+ * plus its client's active CRM contacts) and apply the delta against
+ * projectStakeholderCache/{projectId} (the last-synced set) to stakeholderIndex.
+ * Shared by both syncStakeholderIndex (fires on project writes) and
+ * syncStakeholderIndexFromClient (fires on client writes, fans out to every
+ * project of that client) so a CRM contact added once is a stakeholder on
+ * every project for that client without re-entering them per project.
+ */
+async function syncProjectStakeholderIndex(db, projectId, projectData) {
+  let clientData;
+  if (projectData && projectData.clientId) {
+    const clientSnap = await db.collection('clients').doc(projectData.clientId).get();
+    clientData = clientSnap.exists ? clientSnap.data() : undefined;
+  }
+  const afterEmails = projectData ? computeProjectStakeholderEmails(projectData, clientData) : new Set();
+
+  const cacheRef = db.collection('projectStakeholderCache').doc(projectId);
+  const cacheSnap = await cacheRef.get();
+  const beforeEmails = new Set(cacheSnap.exists ? cacheSnap.data().emails || [] : []);
+
+  const { added, removed } = diffEmailSets(beforeEmails, afterEmails);
+  if (added.length === 0 && removed.length === 0) return;
+
+  const indexCol = db.collection('stakeholderIndex');
+  await Promise.all([
+    ...added.map(async (email) => {
+      const ref = indexCol.doc(email);
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const projectIds = new Set(snap.exists ? snap.data().projectIds || [] : []);
+        projectIds.add(projectId);
+        tx.set(ref, { projectIds: [...projectIds] });
+      });
+    }),
+    ...removed.map(async (email) => {
+      const ref = indexCol.doc(email);
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) return;
+        const projectIds = new Set(snap.data().projectIds || []);
+        projectIds.delete(projectId);
+        if (projectIds.size === 0) {
+          tx.delete(ref);
+        } else {
+          tx.set(ref, { projectIds: [...projectIds] });
+        }
+      });
+    }),
+  ]);
+
+  if (afterEmails.size === 0) {
+    await cacheRef.delete();
+  } else {
+    await cacheRef.set({ emails: [...afterEmails] });
+  }
+
+  logger.info('syncProjectStakeholderIndex updated', { projectId, added, removed });
+}
+
+/**
  * Firestore trigger: keep stakeholderIndex/{email} -> { projectIds } in sync
- * with each project's members + externalRecipients, so the Fathom webhook can
- * look up "which project(s) is this attendee a stakeholder of" in O(1) reads
- * instead of scanning every project. Fires on every write to projects/{projectId};
- * only the emails that actually changed are touched.
+ * with each project's own members + externalRecipients (and, via
+ * syncProjectStakeholderIndex, its client's CRM contacts), so the Fathom
+ * webhook can look up "which project(s) is this attendee a stakeholder of"
+ * in O(1) reads instead of scanning every project.
  */
 exports.syncStakeholderIndex = onDocumentWritten(
   { document: 'projects/{projectId}' },
   async (event) => {
     const projectId = event.params.projectId;
+    const afterData = event.data?.after?.data();
+    await syncProjectStakeholderIndex(admin.firestore(), projectId, afterData);
+  }
+);
+
+/**
+ * Firestore trigger: when a client's CRM contacts change, resync
+ * stakeholderIndex for every project that belongs to that client — a contact
+ * added once (the same list Support tickets already use via
+ * reportedByContactId) becomes a meeting stakeholder on all of that client's
+ * projects without being re-entered per project.
+ */
+exports.syncStakeholderIndexFromClient = onDocumentWritten(
+  { document: 'clients/{clientId}' },
+  async (event) => {
+    const clientId = event.params.clientId;
     const beforeData = event.data?.before?.data();
     const afterData = event.data?.after?.data();
 
-    const { added, removed } = diffStakeholderEmails(beforeData, afterData);
+    const { added, removed } = diffEmailSets(
+      extractClientContactEmails(beforeData),
+      extractClientContactEmails(afterData)
+    );
     if (added.length === 0 && removed.length === 0) return;
 
     const db = admin.firestore();
-    const indexCol = db.collection('stakeholderIndex');
+    const projectsSnap = await db.collection('projects').where('clientId', '==', clientId).get();
+    await Promise.all(
+      projectsSnap.docs.map((doc) => syncProjectStakeholderIndex(db, doc.id, doc.data()))
+    );
 
-    await Promise.all([
-      ...added.map(async (email) => {
-        const ref = indexCol.doc(email);
-        await db.runTransaction(async (tx) => {
-          const snap = await tx.get(ref);
-          const projectIds = new Set(snap.exists ? snap.data().projectIds || [] : []);
-          projectIds.add(projectId);
-          tx.set(ref, { projectIds: [...projectIds] });
-        });
-      }),
-      ...removed.map(async (email) => {
-        const ref = indexCol.doc(email);
-        await db.runTransaction(async (tx) => {
-          const snap = await tx.get(ref);
-          if (!snap.exists) return;
-          const projectIds = new Set(snap.data().projectIds || []);
-          projectIds.delete(projectId);
-          if (projectIds.size === 0) {
-            tx.delete(ref);
-          } else {
-            tx.set(ref, { projectIds: [...projectIds] });
-          }
-        });
-      }),
-    ]);
-
-    logger.info('syncStakeholderIndex updated', { projectId, added, removed });
+    logger.info('syncStakeholderIndexFromClient resynced projects', {
+      clientId,
+      projectCount: projectsSnap.size,
+    });
   }
 );
 
