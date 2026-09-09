@@ -37,6 +37,14 @@ const {
 } = require('./fathomMeeting');
 const {
   exchangeAuthCodeForTokens,
+  refreshAccessToken,
+  listNewGmailMessageIds,
+  getGmailMessage,
+  parseGmailMessage,
+  hasExternalParticipant,
+  filterExternalParticipants,
+  classifyDirection,
+  sanitizeEmailBody,
 } = require('./emailIngestion');
 
 // Use built-in fetch in Node.js 22
@@ -4303,6 +4311,148 @@ exports.getGmailConnectionStatus = onCall(async (request) => {
     lastSyncedAt: data.lastSyncedAt ? data.lastSyncedAt.toDate().toISOString() : null,
   };
 });
+
+/**
+ * Poll every connected Gmail account for new messages every 10 minutes.
+ * Applies the capture-scope guard, matches external participants against
+ * stakeholderIndex (reusing collectMatchedProjectIds unchanged — spec §3),
+ * sanitizes the body, and files it under the matched project or into
+ * unassignedEmails for triage. No attachments, no backfill.
+ */
+exports.syncGmailAccounts = onSchedule(
+  {
+    schedule: 'every 10 minutes',
+    secrets: [googleOAuthClientId, googleOAuthClientSecret, geminiApiKeySecret],
+  },
+  async () => {
+    const db = admin.firestore();
+    const connectionsSnap = await db.collection('gmailConnections').where('status', '==', 'connected').get();
+    if (connectionsSnap.empty) return;
+
+    const clientId = googleOAuthClientId.value();
+    const clientSecret = googleOAuthClientSecret.value();
+    const geminiApiKey = geminiApiKeySecret.value();
+
+    for (const connectionDoc of connectionsSnap.docs) {
+      const uid = connectionDoc.id;
+      try {
+        await syncOneGmailAccount({
+          db,
+          connectionRef: connectionDoc.ref,
+          connection: connectionDoc.data(),
+          clientId,
+          clientSecret,
+          geminiApiKey,
+        });
+      } catch (error) {
+        logger.error('syncGmailAccounts: account sync failed', { uid, error: error.message });
+        if (error.status === 400 || error.status === 401) {
+          await connectionDoc.ref.set({ status: 'needs_reconnect' }, { merge: true });
+        }
+      }
+    }
+  }
+);
+
+async function syncOneGmailAccount({ db, connectionRef, connection, clientId, clientSecret, geminiApiKey }) {
+  const { accessToken } = await refreshAccessToken({
+    refreshToken: connection.refreshToken,
+    clientId,
+    clientSecret,
+    fetchImpl: fetch,
+  });
+
+  const { messageIds, newHistoryId, historyExpired } = await listNewGmailMessageIds({
+    accessToken,
+    startHistoryId: connection.lastHistoryId,
+    fetchImpl: fetch,
+  });
+
+  if (historyExpired) {
+    // Gmail's history log only retains ~7 days. Recovering the gap would mean
+    // backfilling, which is explicitly out of scope (spec Non-goals) — just
+    // re-anchor to "now" and resume incremental sync from there.
+    const profileResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const profile = await profileResponse.json();
+    await connectionRef.set(
+      { lastHistoryId: String(profile.historyId), lastSyncedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    logger.warn('syncGmailAccounts: history expired, re-anchored', { uid: connectionRef.id });
+    return;
+  }
+
+  for (const messageId of messageIds) {
+    await processGmailMessage({ db, accessToken, messageId, geminiApiKey });
+  }
+
+  await connectionRef.set(
+    { lastHistoryId: newHistoryId, lastSyncedAt: admin.firestore.FieldValue.serverTimestamp() },
+    { merge: true }
+  );
+}
+
+async function processGmailMessage({ db, accessToken, messageId, geminiApiKey }) {
+  const dedupRef = db.collection('gmailIngestedMessages').doc(messageId);
+  const dedupSnap = await dedupRef.get();
+  if (dedupSnap.exists) return;
+
+  const resource = await getGmailMessage({ accessToken, messageId, fetchImpl: fetch });
+  const parsed = parseGmailMessage(resource);
+  const participants = [parsed.from, ...parsed.to, ...parsed.cc];
+
+  if (!hasExternalParticipant(participants)) {
+    // Purely internal thread: never written anywhere, not even unassignedEmails.
+    await dedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), captured: false });
+    return;
+  }
+
+  const externalEmails = filterExternalParticipants(participants).map((p) => p.email);
+  const lookups = await Promise.all(
+    [...new Set(externalEmails.map((e) => String(e || '').toLowerCase().trim()).filter(Boolean))]
+      .map(async (email) => {
+        const snap = await db.collection('stakeholderIndex').doc(email).get();
+        return [email, snap.exists ? snap.data().projectIds || [] : []];
+      })
+  );
+  const emailToProjectIds = Object.fromEntries(lookups);
+  const matchedProjectIds = collectMatchedProjectIds(externalEmails, emailToProjectIds);
+
+  const { body, sanitizeFailed } = await sanitizeEmailBody({ apiKey: geminiApiKey, rawBody: parsed.rawBody, fetchImpl: fetch });
+
+  const baseDoc = {
+    gmailMessageId: parsed.gmailMessageId,
+    gmailThreadId: parsed.gmailThreadId,
+    subject: parsed.subject,
+    from: parsed.from,
+    to: parsed.to,
+    cc: parsed.cc,
+    sentAt: new Date(parsed.sentAt),
+    direction: classifyDirection(parsed.from.email),
+    body,
+    sanitizeFailed,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  if (matchedProjectIds.length === 1) {
+    const [projectId] = matchedProjectIds;
+    await db.collection('projects').doc(projectId).collection('emails').doc(messageId).set({
+      ...baseDoc,
+      matchedStakeholderEmails: externalEmails,
+    });
+    logger.info('syncGmailAccounts: matched to project', { projectId, messageId });
+  } else {
+    await db.collection('unassignedEmails').doc(messageId).set({
+      ...baseDoc,
+      candidateProjectIds: matchedProjectIds,
+    });
+    logger.info('syncGmailAccounts: unassigned', { candidateCount: matchedProjectIds.length, messageId });
+  }
+
+  await dedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), captured: true });
+}
 
 /**
  * Generate Purchase Order PDF
