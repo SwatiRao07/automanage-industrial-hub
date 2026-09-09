@@ -4375,6 +4375,16 @@ async function syncOneGmailAccount({ db, connectionRef, connection, clientId, cl
     const profileResponse = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
+    if (!profileResponse.ok) {
+      // Don't touch lastHistoryId on a failed re-anchor fetch — writing a bad
+      // value here (e.g. "undefined") would permanently break this account's
+      // sync. Leave the cursor as-is and retry the whole sync next cycle.
+      logger.warn('syncGmailAccounts: profile re-anchor fetch failed, will retry next cycle', {
+        uid: connectionRef.id,
+        status: profileResponse.status,
+      });
+      return;
+    }
     const profile = await profileResponse.json();
     await connectionRef.set(
       { lastHistoryId: String(profile.historyId), lastSyncedAt: admin.firestore.FieldValue.serverTimestamp() },
