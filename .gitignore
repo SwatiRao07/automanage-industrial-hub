@@ -57,3 +57,6 @@ $RECYCLE.BIN/
 # Debug files
 debug-*.html
 debug-*.js
+
+# Superpowers subagent-driven-development scratch workspace
+.superpowers/
