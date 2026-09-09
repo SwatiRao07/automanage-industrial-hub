@@ -88,6 +88,7 @@ import { toast } from '@/components/ui/use-toast';
 import BrandsTab from '@/components/settings/BrandsTab';
 import BOMTemplatesTab from '@/components/settings/BOMTemplatesTab';
 import BillingEntitiesTab from '@/components/settings/BillingEntitiesTab';
+import GmailConnectionsTab from '@/components/settings/GmailConnectionsTab';
 import { Brand } from '@/types/brand';
 import {
   subscribeToEngineerRates,
@@ -103,7 +104,7 @@ import { subscribeToBrands } from '@/utils/brandFirestore';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/firebase';
 import { fetchAllUsers, updateUserRole, approveUser, rejectUser, deleteUser, UserRole } from '@/utils/userService';
-import { Shield, UserCog } from 'lucide-react';
+import { Shield, UserCog, Inbox } from 'lucide-react';
 
 const Settings = () => {
   // Auth check
@@ -1302,7 +1303,7 @@ const Settings = () => {
         )}
 
         <Tabs defaultValue="clients" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8">
+          <TabsList className="grid w-full grid-cols-9">
             <TabsTrigger value="billing-entities" className="flex items-center gap-2">
               <Landmark size={16} />
               Billing Entities
@@ -1326,6 +1327,10 @@ const Settings = () => {
             <TabsTrigger value="purchase-request" className="flex items-center gap-2">
               <Mail size={16} />
               Purchase Request
+            </TabsTrigger>
+            <TabsTrigger value="communications" className="flex items-center gap-2">
+              <Inbox size={16} />
+              Communications
             </TabsTrigger>
             <TabsTrigger value="users" className="flex items-center gap-2 relative" onClick={() => loadUsers()}>
               <UserCog size={16} />
@@ -2727,6 +2732,11 @@ const Settings = () => {
                 </Alert>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Communications Tab */}
+          <TabsContent value="communications">
+            <GmailConnectionsTab />
           </TabsContent>
 
           {/* Brands Tab */}
