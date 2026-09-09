@@ -79,3 +79,103 @@ test('INTERNAL_MAIL_DOMAINS and PERSONAL_MAIL_DOMAINS are exposed as Sets', () =
   assert.ok(INTERNAL_MAIL_DOMAINS.has('datasensor.in'));
   assert.ok(PERSONAL_MAIL_DOMAINS.has('gmail.com'));
 });
+
+const { parseGmailMessage, stripQuotedHistory } = require('./emailIngestion');
+
+const encode = (text) => Buffer.from(text, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
+
+test('parseGmailMessage extracts headers and a text/plain body', () => {
+  const resource = {
+    id: 'msg_1',
+    threadId: 'thread_1',
+    internalDate: '1735732800000',
+    payload: {
+      headers: [
+        { name: 'Subject', value: 'Quote request' },
+        { name: 'From', value: '"Jane Client" <jane@clientco.com>' },
+        { name: 'To', value: 'host@qualitastech.com' },
+        { name: 'Cc', value: 'teammate@qualitastech.com' },
+      ],
+      mimeType: 'text/plain',
+      body: { data: encode('Please send an updated quote.') },
+    },
+  };
+
+  const result = parseGmailMessage(resource);
+
+  assert.equal(result.gmailMessageId, 'msg_1');
+  assert.equal(result.gmailThreadId, 'thread_1');
+  assert.equal(result.subject, 'Quote request');
+  assert.deepEqual(result.from, { name: 'Jane Client', email: 'jane@clientco.com' });
+  assert.deepEqual(result.to, [{ name: '', email: 'host@qualitastech.com' }]);
+  assert.deepEqual(result.cc, [{ name: '', email: 'teammate@qualitastech.com' }]);
+  assert.equal(result.sentAt, new Date(1735732800000).toISOString());
+  assert.equal(result.rawBody, 'Please send an updated quote.');
+});
+
+test('parseGmailMessage finds text/plain inside multipart parts', () => {
+  const resource = {
+    id: 'msg_2',
+    threadId: 'thread_2',
+    internalDate: '1735732800000',
+    payload: {
+      headers: [{ name: 'From', value: 'jane@clientco.com' }],
+      mimeType: 'multipart/alternative',
+      parts: [
+        { mimeType: 'text/html', body: { data: encode('<p>Hi</p>') } },
+        { mimeType: 'text/plain', body: { data: encode('Plain text body') } },
+      ],
+    },
+  };
+
+  const result = parseGmailMessage(resource);
+  assert.equal(result.rawBody, 'Plain text body');
+});
+
+test('parseGmailMessage falls back to stripped text/html when no text/plain part exists', () => {
+  const resource = {
+    id: 'msg_3',
+    threadId: 'thread_3',
+    internalDate: '1735732800000',
+    payload: {
+      headers: [{ name: 'From', value: 'jane@clientco.com' }],
+      mimeType: 'text/html',
+      body: { data: encode('<p>Hello <b>there</b></p>') },
+    },
+  };
+
+  const result = parseGmailMessage(resource);
+  assert.equal(result.rawBody, 'Hello there');
+});
+
+test('parseGmailMessage handles a missing body gracefully', () => {
+  const result = parseGmailMessage({ id: 'msg_4', threadId: 'thread_4', payload: { headers: [] } });
+  assert.equal(result.rawBody, '');
+  assert.deepEqual(result.to, []);
+  assert.deepEqual(result.cc, []);
+  assert.deepEqual(result.from, { name: '', email: '' });
+});
+
+test('stripQuotedHistory cuts at a Gmail-style "On ... wrote:" quote header', () => {
+  const body = 'New content here.\n\nOn Mon, Jan 5, 2026 at 10:00 AM Jane <jane@clientco.com> wrote:\n> old quoted text';
+  assert.equal(stripQuotedHistory(body), 'New content here.');
+});
+
+test('stripQuotedHistory cuts at an Outlook-style Original Message separator', () => {
+  const body = 'New content.\n\n-----Original Message-----\nFrom: someone\nOld text';
+  assert.equal(stripQuotedHistory(body), 'New content.');
+});
+
+test('stripQuotedHistory strips a trailing block of \'>\'-quoted lines', () => {
+  const body = 'New content.\n> quoted line one\n> quoted line two';
+  assert.equal(stripQuotedHistory(body), 'New content.');
+});
+
+test('stripQuotedHistory returns the trimmed body unchanged when there is no quoted history', () => {
+  assert.equal(stripQuotedHistory('  Just new content.  '), 'Just new content.');
+});
+
+test('stripQuotedHistory handles empty input', () => {
+  assert.equal(stripQuotedHistory(''), '');
+  assert.equal(stripQuotedHistory(undefined), '');
+});

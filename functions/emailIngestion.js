@@ -76,6 +76,89 @@ function classifyDirection(fromEmail) {
   return isInternalDomain(fromEmail) ? 'outbound' : 'inbound';
 }
 
+function decodeBase64Url(data) {
+  if (!data) return '';
+  const normalized = String(data).replace(/-/g, '+').replace(/_/g, '/');
+  return Buffer.from(normalized, 'base64').toString('utf8');
+}
+
+function findBodyPart(payload) {
+  if (!payload) return '';
+  // Priority 1: Direct text/plain body
+  if (payload.mimeType === 'text/plain' && payload.body && payload.body.data) {
+    return decodeBase64Url(payload.body.data);
+  }
+  // Priority 2: Search parts array for text/plain first
+  if (Array.isArray(payload.parts)) {
+    for (const part of payload.parts) {
+      if (part.mimeType === 'text/plain' && part.body && part.body.data) {
+        return decodeBase64Url(part.body.data);
+      }
+    }
+    // Recursively search in parts for nested multipart
+    for (const part of payload.parts) {
+      if (part.mimeType && part.mimeType.startsWith('multipart/')) {
+        const found = findBodyPart(part);
+        if (found) return found;
+      }
+    }
+    // Fall back to text/html in parts
+    for (const part of payload.parts) {
+      if (part.mimeType === 'text/html' && part.body && part.body.data) {
+        return decodeBase64Url(part.body.data).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+    }
+  }
+  // Priority 3: Direct text/html body (fallback)
+  if (payload.mimeType === 'text/html' && payload.body && payload.body.data) {
+    return decodeBase64Url(payload.body.data).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  return '';
+}
+
+function getHeader(headers, name) {
+  const header = (headers || []).find((h) => h && h.name && h.name.toLowerCase() === name.toLowerCase());
+  return header ? header.value : '';
+}
+
+/** Parse a Gmail API `messages.get` (format=full) resource into BOM-Tracker's internal shape. */
+function parseGmailMessage(resource) {
+  const headers = (resource && resource.payload && resource.payload.headers) || [];
+  const fromList = parseAddressList(getHeader(headers, 'From'));
+  const dateHeader = getHeader(headers, 'Date');
+  const sentAt = resource && resource.internalDate
+    ? new Date(Number(resource.internalDate)).toISOString()
+    : (dateHeader ? new Date(dateHeader).toISOString() : new Date().toISOString());
+
+  return {
+    gmailMessageId: (resource && resource.id) || '',
+    gmailThreadId: (resource && resource.threadId) || '',
+    subject: getHeader(headers, 'Subject'),
+    from: fromList[0] || { name: '', email: '' },
+    to: parseAddressList(getHeader(headers, 'To')),
+    cc: parseAddressList(getHeader(headers, 'Cc')),
+    sentAt,
+    rawBody: findBodyPart(resource && resource.payload),
+  };
+}
+
+/** Regex fallback for stripping quoted reply history when the Gemini pass (Task 5) fails. */
+function stripQuotedHistory(bodyText) {
+  let result = String(bodyText || '');
+  const cutPatterns = [
+    /\r?\n\s*On .{0,120} wrote:\s*\r?\n[\s\S]*$/i,
+    /\r?\n-{2,}\s*Original Message\s*-{2,}[\s\S]*$/i,
+    /\r?\n(?:>.*(?:\r?\n)?)+$/,
+  ];
+  for (const pattern of cutPatterns) {
+    const match = result.match(pattern);
+    if (match && typeof match.index === 'number') {
+      result = result.slice(0, match.index);
+    }
+  }
+  return result.trim();
+}
+
 module.exports = {
   INTERNAL_MAIL_DOMAINS,
   PERSONAL_MAIL_DOMAINS,
@@ -84,4 +167,6 @@ module.exports = {
   hasExternalParticipant,
   filterExternalParticipants,
   classifyDirection,
+  parseGmailMessage,
+  stripQuotedHistory,
 };
