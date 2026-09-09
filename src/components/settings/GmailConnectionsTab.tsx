@@ -34,7 +34,7 @@ export default function GmailConnectionsTab() {
   }, []);
 
   useEffect(() => {
-    const code = searchParams.get('gmail_code');
+    const code = searchParams.get('code');
     if (!code) return;
 
     const redirectUri = `${window.location.origin}${window.location.pathname}`;
@@ -51,7 +51,7 @@ export default function GmailConnectionsTab() {
       .finally(() => {
         setConnecting(false);
         const next = new URLSearchParams(searchParams);
-        next.delete('gmail_code');
+        next.delete('code');
         setSearchParams(next, { replace: true });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
