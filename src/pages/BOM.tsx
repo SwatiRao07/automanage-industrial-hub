@@ -39,7 +39,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { getVisibleCategories } from '@/utils/accessControl';
 import ProjectMembersTab from '@/components/Project/ProjectMembersTab';
-import { ProjectMeetingsTab } from '@/components/Project/ProjectMeetingsTab';
+import { ProjectCommunicationsTab } from '@/components/Project/ProjectCommunicationsTab';
 import OverheadsTab from '@/components/BOM/OverheadsTab';
 import ProjectCostBar from '@/components/BOM/ProjectCostBar';
 import { fetchAllUsers } from '@/utils/userService';
@@ -734,9 +734,9 @@ const BOM = () => {
                   </Badge>
                 </TabsTrigger>
                 {!isPartner && (
-                  <TabsTrigger value="meetings" className="flex items-center gap-2">
+                  <TabsTrigger value="communications" className="flex items-center gap-2">
                     <Video size={16} />
-                    Meetings
+                    Communications
                   </TabsTrigger>
                 )}
                 {!isPartner && (
@@ -1143,9 +1143,9 @@ const BOM = () => {
                 )}
               </TabsContent>
 
-              {/* Meetings Tab */}
-              <TabsContent value="meetings" className="mt-0">
-                {projectId && <ProjectMeetingsTab projectId={projectId} />}
+              {/* Communications Tab */}
+              <TabsContent value="communications" className="mt-0">
+                {projectId && <ProjectCommunicationsTab projectId={projectId} />}
               </TabsContent>
 
               {/* Context Tab - Project Intelligence for Transcripts */}
