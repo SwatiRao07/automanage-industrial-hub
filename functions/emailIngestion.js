@@ -219,6 +219,54 @@ async function refreshAccessToken({ refreshToken, clientId, clientSecret, fetchI
   return { accessToken: payload.access_token };
 }
 
+/**
+ * List message ids added since startHistoryId via the Gmail History API,
+ * paginating through nextPageToken. Returns historyExpired: true on a 404
+ * (Gmail's history log only retains ~7 days) so the caller can re-anchor.
+ */
+async function listNewGmailMessageIds({ accessToken, startHistoryId, fetchImpl }) {
+  const messageIds = new Set();
+  let pageToken;
+  let newHistoryId = startHistoryId;
+
+  do {
+    const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/history');
+    url.searchParams.set('startHistoryId', startHistoryId);
+    url.searchParams.set('historyTypes', 'messageAdded');
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+    const response = await fetchImpl(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (response.status === 404) {
+      return { messageIds: [], newHistoryId: startHistoryId, historyExpired: true };
+    }
+    if (!response.ok) {
+      throw new Error(`Gmail history.list failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    for (const record of payload.history || []) {
+      for (const added of record.messagesAdded || []) {
+        if (added.message && added.message.id) messageIds.add(added.message.id);
+      }
+    }
+    if (payload.historyId) newHistoryId = payload.historyId;
+    pageToken = payload.nextPageToken;
+  } while (pageToken);
+
+  return { messageIds: [...messageIds], newHistoryId, historyExpired: false };
+}
+
+/** Fetch one message resource in full format (headers + body parts). */
+async function getGmailMessage({ accessToken, messageId, fetchImpl }) {
+  const response = await fetchImpl(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!response.ok) {
+    throw new Error(`Gmail messages.get failed: ${response.status}`);
+  }
+  return response.json();
+}
+
 module.exports = {
   INTERNAL_MAIL_DOMAINS,
   PERSONAL_MAIL_DOMAINS,
@@ -231,4 +279,6 @@ module.exports = {
   stripQuotedHistory,
   exchangeAuthCodeForTokens,
   refreshAccessToken,
+  listNewGmailMessageIds,
+  getGmailMessage,
 };

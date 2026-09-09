@@ -261,3 +261,80 @@ test('refreshAccessToken throws with a status code when the refresh token is rev
     }
   );
 });
+
+const { listNewGmailMessageIds, getGmailMessage } = require('./emailIngestion');
+
+test('listNewGmailMessageIds collects messageAdded ids and the latest historyId', async () => {
+  const fetchImpl = async (url) => {
+    assert.match(String(url), /startHistoryId=1000/);
+    assert.match(String(url), /historyTypes=messageAdded/);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        history: [
+          { messagesAdded: [{ message: { id: 'm1' } }] },
+          { messagesAdded: [{ message: { id: 'm2' } }, { message: { id: 'm1' } }] },
+        ],
+        historyId: '1050',
+      }),
+    };
+  };
+
+  const result = await listNewGmailMessageIds({ accessToken: 'token', startHistoryId: '1000', fetchImpl });
+  assert.deepEqual(result, { messageIds: ['m1', 'm2'], newHistoryId: '1050', historyExpired: false });
+});
+
+test('listNewGmailMessageIds follows pageToken pagination', async () => {
+  let call = 0;
+  const fetchImpl = async (url) => {
+    call += 1;
+    if (call === 1) {
+      assert.doesNotMatch(String(url), /pageToken/);
+      return { ok: true, status: 200, json: async () => ({ history: [{ messagesAdded: [{ message: { id: 'm1' } }] }], nextPageToken: 'p2', historyId: '1010' }) };
+    }
+    assert.match(String(url), /pageToken=p2/);
+    return { ok: true, status: 200, json: async () => ({ history: [{ messagesAdded: [{ message: { id: 'm2' } }] }], historyId: '1020' }) };
+  };
+
+  const result = await listNewGmailMessageIds({ accessToken: 'token', startHistoryId: '1000', fetchImpl });
+  assert.deepEqual(result, { messageIds: ['m1', 'm2'], newHistoryId: '1020', historyExpired: false });
+});
+
+test('listNewGmailMessageIds reports historyExpired on a 404', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 404 });
+  const result = await listNewGmailMessageIds({ accessToken: 'token', startHistoryId: '1000', fetchImpl });
+  assert.deepEqual(result, { messageIds: [], newHistoryId: '1000', historyExpired: true });
+});
+
+test('listNewGmailMessageIds throws on a non-404 error status', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 500 });
+  await assert.rejects(
+    () => listNewGmailMessageIds({ accessToken: 'token', startHistoryId: '1000', fetchImpl }),
+    /Gmail history.list failed: 500/
+  );
+});
+
+test('listNewGmailMessageIds returns no ids when there is no new history', async () => {
+  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ historyId: '1000' }) });
+  const result = await listNewGmailMessageIds({ accessToken: 'token', startHistoryId: '1000', fetchImpl });
+  assert.deepEqual(result, { messageIds: [], newHistoryId: '1000', historyExpired: false });
+});
+
+test('getGmailMessage fetches a full-format message resource', async () => {
+  const fetchImpl = async (url, options) => {
+    assert.match(String(url), /messages\/msg_1\?format=full/);
+    assert.equal(options.headers.Authorization, 'Bearer token');
+    return { ok: true, json: async () => ({ id: 'msg_1' }) };
+  };
+  const result = await getGmailMessage({ accessToken: 'token', messageId: 'msg_1', fetchImpl });
+  assert.deepEqual(result, { id: 'msg_1' });
+});
+
+test('getGmailMessage throws on a failed fetch', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 404 });
+  await assert.rejects(
+    () => getGmailMessage({ accessToken: 'token', messageId: 'msg_1', fetchImpl }),
+    /Gmail messages.get failed: 404/
+  );
+});
