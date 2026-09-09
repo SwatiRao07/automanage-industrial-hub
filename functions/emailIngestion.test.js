@@ -338,3 +338,57 @@ test('getGmailMessage throws on a failed fetch', async () => {
     /Gmail messages.get failed: 404/
   );
 });
+
+const { sanitizeEmailBody } = require('./emailIngestion');
+
+test('sanitizeEmailBody returns the Gemini-cleaned body on success', async () => {
+  const fetchImpl = async (url, options) => {
+    assert.equal(url, 'https://generativelanguage.googleapis.com/v1beta/interactions');
+    assert.equal(options.headers['x-goog-api-key'], 'test-key');
+    return {
+      ok: true,
+      json: async () => ({
+        steps: [{
+          type: 'model_output',
+          content: [{ type: 'text', text: JSON.stringify({ body: 'Cleaned new content.' }) }],
+        }],
+      }),
+    };
+  };
+
+  const result = await sanitizeEmailBody({ apiKey: 'test-key', rawBody: 'Raw content.\n\nOn ... wrote:\n> old', fetchImpl });
+  assert.deepEqual(result, { body: 'Cleaned new content.', sanitizeFailed: false });
+});
+
+test('sanitizeEmailBody falls back to the regex stripper when no API key is configured', async () => {
+  const result = await sanitizeEmailBody({
+    apiKey: '', rawBody: 'New content.\n\nOn Mon wrote:\n> old', fetchImpl: async () => { throw new Error('should not be called'); },
+  });
+  assert.deepEqual(result, { body: 'New content.', sanitizeFailed: true });
+});
+
+test('sanitizeEmailBody falls back to the regex stripper when Gemini returns a non-OK response', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 500 });
+  const result = await sanitizeEmailBody({ apiKey: 'test-key', rawBody: 'New content.\n> quoted', fetchImpl });
+  assert.deepEqual(result, { body: 'New content.', sanitizeFailed: true });
+});
+
+test('sanitizeEmailBody falls back to the regex stripper when Gemini returns an empty body', async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    json: async () => ({ steps: [{ type: 'model_output', content: [{ type: 'text', text: JSON.stringify({ body: '' }) }] }] }),
+  });
+  const result = await sanitizeEmailBody({ apiKey: 'test-key', rawBody: 'New content.\n> quoted', fetchImpl });
+  assert.deepEqual(result, { body: 'New content.', sanitizeFailed: true });
+});
+
+test('sanitizeEmailBody falls back to the regex stripper when the fetch call throws', async () => {
+  const fetchImpl = async () => { throw new Error('network down'); };
+  const result = await sanitizeEmailBody({ apiKey: 'test-key', rawBody: 'New content.\n> quoted', fetchImpl });
+  assert.deepEqual(result, { body: 'New content.', sanitizeFailed: true });
+});
+
+test('sanitizeEmailBody treats blank raw input as already-empty without calling Gemini', async () => {
+  const result = await sanitizeEmailBody({ apiKey: 'test-key', rawBody: '   ', fetchImpl: async () => { throw new Error('should not be called'); } });
+  assert.deepEqual(result, { body: '', sanitizeFailed: true });
+});
