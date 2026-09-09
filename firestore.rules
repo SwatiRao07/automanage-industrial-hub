@@ -67,6 +67,13 @@ service cloud.firestore {
         && request.auth.token.status == 'approved';
     }
 
+    // Gmail refresh tokens: server-only. connectGmailAccount (write) and
+    // syncGmailAccounts (read) are Cloud Functions using the Admin SDK, which
+    // bypasses these rules entirely — this just blocks every client path.
+    match /gmailConnections/{document=**} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
