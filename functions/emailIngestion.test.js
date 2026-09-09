@@ -179,3 +179,85 @@ test('stripQuotedHistory handles empty input', () => {
   assert.equal(stripQuotedHistory(''), '');
   assert.equal(stripQuotedHistory(undefined), '');
 });
+
+const { exchangeAuthCodeForTokens, refreshAccessToken } = require('./emailIngestion');
+
+test('exchangeAuthCodeForTokens exchanges a code and fetches the connected profile', async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    if (String(url).includes('oauth2.googleapis.com/token')) {
+      return {
+        ok: true,
+        json: async () => ({ access_token: 'access-1', refresh_token: 'refresh-1' }),
+      };
+    }
+    if (String(url).includes('gmail/v1/users/me/profile')) {
+      return { ok: true, json: async () => ({ emailAddress: 'me@qualitastech.com', historyId: '1000' }) };
+    }
+    throw new Error(`unexpected url: ${url}`);
+  };
+
+  const result = await exchangeAuthCodeForTokens({
+    code: 'auth-code',
+    redirectUri: 'https://visionbomtracker.web.app/settings',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+    fetchImpl,
+  });
+
+  assert.deepEqual(result, {
+    refreshToken: 'refresh-1',
+    accessToken: 'access-1',
+    email: 'me@qualitastech.com',
+    historyId: '1000',
+  });
+  assert.equal(calls[0].options.method, 'POST');
+  assert.match(calls[0].options.body, /code=auth-code/);
+  assert.match(calls[0].options.body, /grant_type=authorization_code/);
+  assert.equal(calls[1].options.headers.Authorization, 'Bearer access-1');
+});
+
+test('exchangeAuthCodeForTokens throws when the token endpoint rejects the code', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 400 });
+  await assert.rejects(
+    () => exchangeAuthCodeForTokens({
+      code: 'bad-code', redirectUri: 'https://x', clientId: 'c', clientSecret: 's', fetchImpl,
+    }),
+    /Gmail token exchange failed: 400/
+  );
+});
+
+test('exchangeAuthCodeForTokens throws when no refresh token is returned', async () => {
+  const fetchImpl = async () => ({ ok: true, json: async () => ({ access_token: 'a' }) });
+  await assert.rejects(
+    () => exchangeAuthCodeForTokens({
+      code: 'c', redirectUri: 'https://x', clientId: 'c', clientSecret: 's', fetchImpl,
+    }),
+    /did not return a refresh token/
+  );
+});
+
+test('refreshAccessToken returns a fresh access token', async () => {
+  const fetchImpl = async (url, options) => {
+    assert.match(options.body, /grant_type=refresh_token/);
+    assert.match(options.body, /refresh_token=refresh-1/);
+    return { ok: true, json: async () => ({ access_token: 'access-2' }) };
+  };
+  const result = await refreshAccessToken({
+    refreshToken: 'refresh-1', clientId: 'c', clientSecret: 's', fetchImpl,
+  });
+  assert.deepEqual(result, { accessToken: 'access-2' });
+});
+
+test('refreshAccessToken throws with a status code when the refresh token is revoked', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 400 });
+  await assert.rejects(
+    () => refreshAccessToken({ refreshToken: 'bad', clientId: 'c', clientSecret: 's', fetchImpl }),
+    (error) => {
+      assert.match(error.message, /Gmail token refresh failed: 400/);
+      assert.equal(error.status, 400);
+      return true;
+    }
+  );
+});

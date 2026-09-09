@@ -159,6 +159,66 @@ function stripQuotedHistory(bodyText) {
   return result.trim();
 }
 
+const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
+
+/** Exchange an OAuth authorization code for a refresh token, and fetch the connected mailbox's profile. */
+async function exchangeAuthCodeForTokens({ code, redirectUri, clientId, clientSecret, fetchImpl }) {
+  const tokenResponse = await fetchImpl(GOOGLE_TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
+    }).toString(),
+  });
+  if (!tokenResponse.ok) {
+    throw new Error(`Gmail token exchange failed: ${tokenResponse.status}`);
+  }
+  const tokenPayload = await tokenResponse.json();
+  if (!tokenPayload.refresh_token) {
+    throw new Error('Google did not return a refresh token (re-consent with prompt=consent may be required)');
+  }
+
+  const profileResponse = await fetchImpl('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+    headers: { Authorization: `Bearer ${tokenPayload.access_token}` },
+  });
+  if (!profileResponse.ok) {
+    throw new Error(`Gmail profile lookup failed: ${profileResponse.status}`);
+  }
+  const profile = await profileResponse.json();
+
+  return {
+    refreshToken: tokenPayload.refresh_token,
+    accessToken: tokenPayload.access_token,
+    email: profile.emailAddress,
+    historyId: String(profile.historyId),
+  };
+}
+
+/** Exchange a stored refresh token for a fresh access token. */
+async function refreshAccessToken({ refreshToken, clientId, clientSecret, fetchImpl }) {
+  const response = await fetchImpl(GOOGLE_TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+    }).toString(),
+  });
+  if (!response.ok) {
+    const error = new Error(`Gmail token refresh failed: ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  const payload = await response.json();
+  return { accessToken: payload.access_token };
+}
+
 module.exports = {
   INTERNAL_MAIL_DOMAINS,
   PERSONAL_MAIL_DOMAINS,
@@ -169,4 +229,6 @@ module.exports = {
   classifyDirection,
   parseGmailMessage,
   stripQuotedHistory,
+  exchangeAuthCodeForTokens,
+  refreshAccessToken,
 };
