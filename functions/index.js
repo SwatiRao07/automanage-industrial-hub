@@ -35,6 +35,9 @@ const {
   computeProjectStakeholderEmails,
   diffEmailSets,
 } = require('./fathomMeeting');
+const {
+  exchangeAuthCodeForTokens,
+} = require('./emailIngestion');
 
 // Use built-in fetch in Node.js 22
 const fetch = globalThis.fetch;
@@ -50,6 +53,8 @@ const geminiApiKeySecret = defineSecret('GEMINI_API_KEY');
 const resendApiKey = defineSecret('RESEND_API_KEY');
 const pulseApiKey = defineSecret('PULSE_API_KEY');
 const fathomWebhookSecret = defineSecret('FATHOM_WEBHOOK_SECRET');
+const googleOAuthClientId = defineSecret('GOOGLE_OAUTH_CLIENT_ID');
+const googleOAuthClientSecret = defineSecret('GOOGLE_OAUTH_CLIENT_SECRET');
 const PULSE_BASE_URL = process.env.PULSE_BASE_URL || 'https://eagle-eye.qualitastech.com/pulse';
 
 // Helper function to get Resend API key (works in both emulator and production)
@@ -4239,6 +4244,64 @@ exports.discardUnassignedMeeting = onCall(async (request) => {
   await admin.firestore().collection('unassignedMeetings').doc(meetingId).delete();
   logger.info('discardUnassignedMeeting: discarded', { meetingId, by: auth.uid });
   return { success: true };
+});
+
+/**
+ * Connect the caller's own Gmail account: exchange an OAuth code for a
+ * refresh token and store it server-only. Requires only auth (not admin) —
+ * a user can only ever connect their own gmailConnections/{uid} doc.
+ */
+exports.connectGmailAccount = onCall(
+  { secrets: [googleOAuthClientId, googleOAuthClientSecret] },
+  async (request) => {
+    const { auth, data } = request;
+    if (!auth) {
+      throw new Error('Authentication required');
+    }
+    const { code, redirectUri } = data || {};
+    if (!code || !redirectUri) {
+      throw new Error('code and redirectUri are required');
+    }
+
+    const { refreshToken, email, historyId } = await exchangeAuthCodeForTokens({
+      code,
+      redirectUri,
+      clientId: googleOAuthClientId.value(),
+      clientSecret: googleOAuthClientSecret.value(),
+      fetchImpl: fetch,
+    });
+
+    await admin.firestore().collection('gmailConnections').doc(auth.uid).set({
+      email,
+      refreshToken,
+      status: 'connected',
+      lastHistoryId: historyId,
+      connectedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    logger.info('connectGmailAccount: connected', { uid: auth.uid, email });
+    return { success: true, email };
+  }
+);
+
+/** Read back the caller's own Gmail connection state, without ever exposing the refresh token. */
+exports.getGmailConnectionStatus = onCall(async (request) => {
+  const { auth } = request;
+  if (!auth) {
+    throw new Error('Authentication required');
+  }
+
+  const snap = await admin.firestore().collection('gmailConnections').doc(auth.uid).get();
+  if (!snap.exists) {
+    return { connected: false };
+  }
+  const data = snap.data();
+  return {
+    connected: true,
+    email: data.email,
+    status: data.status,
+    lastSyncedAt: data.lastSyncedAt ? data.lastSyncedAt.toDate().toISOString() : null,
+  };
 });
 
 /**
