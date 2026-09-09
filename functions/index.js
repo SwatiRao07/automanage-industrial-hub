@@ -4264,11 +4264,16 @@ exports.connectGmailAccount = onCall(
   async (request) => {
     const { auth, data } = request;
     if (!auth) {
-      throw new Error('Authentication required');
+      throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+    }
+    const callerRecord = await admin.auth().getUser(auth.uid);
+    const callerClaims = callerRecord.customClaims || {};
+    if (callerClaims.status !== 'approved') {
+      throw new functions.https.HttpsError('permission-denied', 'Approved access is required');
     }
     const { code, redirectUri } = data || {};
     if (!code || !redirectUri) {
-      throw new Error('code and redirectUri are required');
+      throw new functions.https.HttpsError('invalid-argument', 'code and redirectUri are required');
     }
 
     const { refreshToken, email, historyId } = await exchangeAuthCodeForTokens({
@@ -4296,7 +4301,12 @@ exports.connectGmailAccount = onCall(
 exports.getGmailConnectionStatus = onCall(async (request) => {
   const { auth } = request;
   if (!auth) {
-    throw new Error('Authentication required');
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+  const callerRecord = await admin.auth().getUser(auth.uid);
+  const callerClaims = callerRecord.customClaims || {};
+  if (callerClaims.status !== 'approved') {
+    throw new functions.https.HttpsError('permission-denied', 'Approved access is required');
   }
 
   const snap = await admin.firestore().collection('gmailConnections').doc(auth.uid).get();
@@ -4323,6 +4333,8 @@ exports.syncGmailAccounts = onSchedule(
   {
     schedule: 'every 10 minutes',
     secrets: [googleOAuthClientId, googleOAuthClientSecret, geminiApiKeySecret],
+    timeoutSeconds: 300,
+    memory: '512MiB',
   },
   async () => {
     const db = admin.firestore();
@@ -4410,11 +4422,33 @@ async function processGmailMessage({ db, accessToken, messageId, geminiApiKey })
   if (dedupSnap.exists) return;
 
   const resource = await getGmailMessage({ accessToken, messageId, fetchImpl: fetch });
+
+  const labels = new Set(resource.labelIds || []);
+  if (labels.has('DRAFT') || labels.has('SPAM') || labels.has('TRASH') || labels.has('CHAT')) {
+    // Drafts/spam/trash/chat are never real captured correspondence.
+    await dedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), captured: false });
+    return;
+  }
+
   const parsed = parseGmailMessage(resource);
   const participants = [parsed.from, ...parsed.to, ...parsed.cc];
 
   if (!hasExternalParticipant(participants)) {
     // Purely internal thread: never written anywhere, not even unassignedEmails.
+    await dedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), captured: false });
+    return;
+  }
+
+  // A physical message can arrive under a different Gmail message id in each
+  // connected mailbox on the same thread. Dedup on the globally-unique
+  // RFC-822 Message-ID (falling back to this mailbox's own Gmail id if that
+  // header is somehow absent) so the same email isn't filed twice.
+  const globalMessageKey = String(parsed.messageIdHeader || parsed.gmailMessageId)
+    .trim()
+    .replace(/^<|>$/g, '');
+  const globalDedupRef = db.collection('gmailIngestedMessageIds').doc(globalMessageKey);
+  const globalDedupSnap = await globalDedupRef.get();
+  if (globalDedupSnap.exists) {
     await dedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), captured: false });
     return;
   }
@@ -4462,30 +4496,31 @@ async function processGmailMessage({ db, accessToken, messageId, geminiApiKey })
   }
 
   await dedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), captured: true });
+  await globalDedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), gmailMessageId: parsed.gmailMessageId });
 }
 
 /** Move an unassigned email into a project's emails subcollection. Admin only. */
 exports.assignUnassignedEmail = onCall(async (request) => {
   const { auth, data } = request;
   if (!auth) {
-    throw new Error('Authentication required');
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
   }
   const callerRecord = await admin.auth().getUser(auth.uid);
   const callerClaims = callerRecord.customClaims || {};
   if (callerClaims.role !== 'admin' || callerClaims.status !== 'approved') {
-    throw new Error('Admin privileges required');
+    throw new functions.https.HttpsError('permission-denied', 'Admin privileges required');
   }
 
   const { emailId, projectId } = data;
   if (!emailId || !projectId) {
-    throw new Error('emailId and projectId are required');
+    throw new functions.https.HttpsError('invalid-argument', 'emailId and projectId are required');
   }
 
   const db = admin.firestore();
   const unassignedRef = db.collection('unassignedEmails').doc(emailId);
   const snap = await unassignedRef.get();
   if (!snap.exists) {
-    throw new Error('Email not found');
+    throw new functions.https.HttpsError('not-found', 'Email not found');
   }
   const { candidateProjectIds, ...emailData } = snap.data();
   const projectEmailRef = db.collection('projects').doc(projectId).collection('emails').doc(emailId);
@@ -4508,17 +4543,17 @@ exports.assignUnassignedEmail = onCall(async (request) => {
 exports.discardUnassignedEmail = onCall(async (request) => {
   const { auth, data } = request;
   if (!auth) {
-    throw new Error('Authentication required');
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
   }
   const callerRecord = await admin.auth().getUser(auth.uid);
   const callerClaims = callerRecord.customClaims || {};
   if (callerClaims.role !== 'admin' || callerClaims.status !== 'approved') {
-    throw new Error('Admin privileges required');
+    throw new functions.https.HttpsError('permission-denied', 'Admin privileges required');
   }
 
   const { emailId } = data;
   if (!emailId) {
-    throw new Error('emailId is required');
+    throw new functions.https.HttpsError('invalid-argument', 'emailId is required');
   }
 
   await admin.firestore().collection('unassignedEmails').doc(emailId).delete();

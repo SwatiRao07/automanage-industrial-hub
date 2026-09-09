@@ -134,6 +134,7 @@ function parseGmailMessage(resource) {
     gmailMessageId: (resource && resource.id) || '',
     gmailThreadId: (resource && resource.threadId) || '',
     subject: getHeader(headers, 'Subject'),
+    messageIdHeader: getHeader(headers, 'Message-Id'),
     from: fromList[0] || { name: '', email: '' },
     to: parseAddressList(getHeader(headers, 'To')),
     cc: parseAddressList(getHeader(headers, 'Cc')),

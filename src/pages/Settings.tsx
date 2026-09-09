@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -109,7 +110,16 @@ import { Shield, UserCog, Inbox } from 'lucide-react';
 const Settings = () => {
   // Auth check
   const { user, loading: authLoading, isAdmin } = useAuth();
-  
+
+  // Google OAuth redirect (Gmail connection) lands back on this page with
+  // ?code=... — make sure the Communications tab (which mounts
+  // GmailConnectionsTab) is selected immediately so its redirect-handling
+  // effect actually runs.
+  const [searchParams] = useSearchParams();
+  const [activeSettingsTab, setActiveSettingsTab] = useState(
+    () => (searchParams.get('code') ? 'communications' : 'clients')
+  );
+
   // State management
   const [clients, setClients] = useState<Client[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -1302,7 +1312,7 @@ const Settings = () => {
           </Alert>
         )}
 
-        <Tabs defaultValue="clients" className="space-y-6">
+        <Tabs value={activeSettingsTab} onValueChange={setActiveSettingsTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-9">
             <TabsTrigger value="billing-entities" className="flex items-center gap-2">
               <Landmark size={16} />

@@ -37,6 +37,23 @@ export default function GmailConnectionsTab() {
     const code = searchParams.get('code');
     if (!code) return;
 
+    const expectedState = sessionStorage.getItem('gmail_oauth_state');
+    const returnedState = searchParams.get('state');
+    sessionStorage.removeItem('gmail_oauth_state');
+
+    const clearCodeFromUrl = () => {
+      const next = new URLSearchParams(searchParams);
+      next.delete('code');
+      next.delete('state');
+      setSearchParams(next, { replace: true });
+    };
+
+    if (!expectedState || returnedState !== expectedState) {
+      toast({ title: 'Gmail connection failed', description: 'Invalid OAuth state — please try connecting again.', variant: 'destructive' });
+      clearCodeFromUrl();
+      return;
+    }
+
     const redirectUri = `${window.location.origin}${window.location.pathname}`;
     setConnecting(true);
     connectGmailAccount(code, redirectUri)
@@ -50,9 +67,7 @@ export default function GmailConnectionsTab() {
       })
       .finally(() => {
         setConnecting(false);
-        const next = new URLSearchParams(searchParams);
-        next.delete('code');
-        setSearchParams(next, { replace: true });
+        clearCodeFromUrl();
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -60,6 +75,8 @@ export default function GmailConnectionsTab() {
   const startConnect = () => {
     const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID as string;
     const redirectUri = `${window.location.origin}${window.location.pathname}`;
+    const state = crypto.randomUUID();
+    sessionStorage.setItem('gmail_oauth_state', state);
     const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('redirect_uri', redirectUri);
@@ -67,6 +84,7 @@ export default function GmailConnectionsTab() {
     url.searchParams.set('scope', GMAIL_SCOPE);
     url.searchParams.set('access_type', 'offline');
     url.searchParams.set('prompt', 'consent');
+    url.searchParams.set('state', state);
     window.location.href = url.toString();
   };
 

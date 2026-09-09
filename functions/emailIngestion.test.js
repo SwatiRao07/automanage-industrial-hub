@@ -95,6 +95,7 @@ test('parseGmailMessage extracts headers and a text/plain body', () => {
         { name: 'From', value: '"Jane Client" <jane@clientco.com>' },
         { name: 'To', value: 'host@qualitastech.com' },
         { name: 'Cc', value: 'teammate@qualitastech.com' },
+        { name: 'Message-Id', value: '<CAB1234@mail.gmail.com>' },
       ],
       mimeType: 'text/plain',
       body: { data: encode('Please send an updated quote.') },
@@ -111,6 +112,12 @@ test('parseGmailMessage extracts headers and a text/plain body', () => {
   assert.deepEqual(result.cc, [{ name: '', email: 'teammate@qualitastech.com' }]);
   assert.equal(result.sentAt, new Date(1735732800000).toISOString());
   assert.equal(result.rawBody, 'Please send an updated quote.');
+  assert.equal(result.messageIdHeader, '<CAB1234@mail.gmail.com>');
+});
+
+test('parseGmailMessage returns an empty messageIdHeader when the header is absent', () => {
+  const result = parseGmailMessage({ id: 'msg_5', threadId: 'thread_5', payload: { headers: [] } });
+  assert.equal(result.messageIdHeader, '');
 });
 
 test('parseGmailMessage finds text/plain inside multipart parts', () => {
