@@ -41,6 +41,10 @@ import { weekRangeFromDate } from "@/components/CostAnalysis/WeekNavigator";
 import { fetchPendingUsers } from "@/utils/userService";
 import { getUnassignedMeetings, assignUnassignedMeeting, discardUnassignedMeeting } from "@/utils/meetingFirestore";
 import type { UnassignedMeeting } from "@/types/meeting";
+import { getUnassignedEmails, assignUnassignedEmail, discardUnassignedEmail } from "@/utils/emailFirestore";
+import type { UnassignedEmail } from "@/types/email";
+import { mergeUnassignedCommunications } from "@/utils/communicationsMerge";
+import { Mail } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const KPI = () => {
@@ -75,6 +79,8 @@ const KPI = () => {
   const [pendingUsers, setPendingUsers] = useState<{ id?: string; uid?: string; email?: string; displayName?: string }[]>([]);
   const [unassignedMeetings, setUnassignedMeetings] = useState<UnassignedMeeting[]>([]);
   const [resolvingMeetingId, setResolvingMeetingId] = useState<string | null>(null);
+  const [unassignedEmails, setUnassignedEmails] = useState<UnassignedEmail[]>([]);
+  const [resolvingEmailId, setResolvingEmailId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchKPIData = async () => {
@@ -190,6 +196,14 @@ const KPI = () => {
           console.error('Error fetching unassigned meetings:', error);
         }
 
+        // Emails needing manual project assignment
+        try {
+          const unassigned = await getUnassignedEmails();
+          setUnassignedEmails(unassigned);
+        } catch (error) {
+          console.error('Error fetching unassigned emails:', error);
+        }
+
       } catch (error) {
         console.error('Error fetching KPI data:', error);
       } finally {
@@ -230,6 +244,30 @@ const KPI = () => {
       console.error('Error discarding meeting:', error);
     } finally {
       setResolvingMeetingId(null);
+    }
+  };
+
+  const handleAssignEmail = async (emailId: string, projectId: string) => {
+    setResolvingEmailId(emailId);
+    try {
+      await assignUnassignedEmail(emailId, projectId);
+      setUnassignedEmails((prev) => prev.filter((e) => e.id !== emailId));
+    } catch (error) {
+      console.error('Error assigning email:', error);
+    } finally {
+      setResolvingEmailId(null);
+    }
+  };
+
+  const handleDiscardEmail = async (emailId: string) => {
+    setResolvingEmailId(emailId);
+    try {
+      await discardUnassignedEmail(emailId);
+      setUnassignedEmails((prev) => prev.filter((e) => e.id !== emailId));
+    } catch (error) {
+      console.error('Error discarding email:', error);
+    } finally {
+      setResolvingEmailId(null);
     }
   };
 
@@ -410,7 +448,7 @@ const KPI = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {pendingClaims.count === 0 && pendingPOApprovals.count === 0 && pendingUsers.length === 0 && unassignedMeetings.length === 0 ? (
+              {pendingClaims.count === 0 && pendingPOApprovals.count === 0 && pendingUsers.length === 0 && unassignedMeetings.length === 0 && unassignedEmails.length === 0 ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-6 justify-center">
                   <CheckCircle className="h-4 w-4 text-green-500" />
                   All caught up
@@ -494,48 +532,64 @@ const KPI = () => {
                     </div>
                   )}
 
-                  {unassignedMeetings.length > 0 && (
+                  {(unassignedMeetings.length > 0 || unassignedEmails.length > 0) && (
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <Video className="h-4 w-4 text-amber-600" />
-                          Meetings Needing Assignment
+                          Communications Needing Assignment
                         </div>
                         <Badge variant="outline" className="bg-amber-50 text-amber-700">
-                          {unassignedMeetings.length}
+                          {unassignedMeetings.length + unassignedEmails.length}
                         </Badge>
                       </div>
                       <div className="space-y-2">
-                        {unassignedMeetings.map((meeting) => (
-                          <div key={meeting.id} className="flex items-center gap-2 text-sm px-2 py-1.5 rounded border">
-                            <span className="flex-1 truncate" title={meeting.title}>
-                              {meeting.title || 'Untitled meeting'}
-                            </span>
-                            <Select
-                              disabled={resolvingMeetingId === meeting.id}
-                              onValueChange={(projectId) => handleAssignMeeting(meeting.id, projectId)}
-                            >
-                              <SelectTrigger className="w-40 h-8 text-xs">
-                                <SelectValue placeholder="Assign to..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {projects.map((p) => (
-                                  <SelectItem key={p.id} value={p.id}>
-                                    {p.projectName || p.id}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled={resolvingMeetingId === meeting.id}
-                              onClick={() => handleDiscardMeeting(meeting.id)}
-                            >
-                              Discard
-                            </Button>
-                          </div>
-                        ))}
+                        {mergeUnassignedCommunications(unassignedMeetings, unassignedEmails).map((entry) => {
+                          // Keep `entry` whole (don't destructure `kind`/`item` into separate
+                          // bindings) so TypeScript's discriminated-union narrowing on
+                          // `entry.kind` still applies to `entry.item` in each branch below.
+                          const id = entry.item.id;
+                          const label = entry.kind === 'meeting' ? (entry.item.title || 'Untitled meeting') : (entry.item.subject || '(no subject)');
+                          const resolving = entry.kind === 'meeting' ? resolvingMeetingId === id : resolvingEmailId === id;
+                          const onAssign = (projectId: string) => (entry.kind === 'meeting' ? handleAssignMeeting(id, projectId) : handleAssignEmail(id, projectId));
+                          const onDiscard = () => (entry.kind === 'meeting' ? handleDiscardMeeting(id) : handleDiscardEmail(id));
+
+                          return (
+                            <div key={`${entry.kind}-${id}`} className="flex items-center gap-2 text-sm px-2 py-1.5 rounded border">
+                              {entry.kind === 'meeting' ? (
+                                <Video className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              ) : (
+                                <Mail className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              )}
+                              <span className="flex-1 truncate" title={label}>
+                                {label}
+                              </span>
+                              <Select
+                                disabled={resolving}
+                                onValueChange={onAssign}
+                              >
+                                <SelectTrigger className="w-40 h-8 text-xs">
+                                  <SelectValue placeholder="Assign to..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {projects.map((p) => (
+                                    <SelectItem key={p.id} value={p.id}>
+                                      {p.projectName || p.id}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={resolving}
+                                onClick={onDiscard}
+                              >
+                                Discard
+                              </Button>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
