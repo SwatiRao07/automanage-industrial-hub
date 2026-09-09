@@ -4464,6 +4464,68 @@ async function processGmailMessage({ db, accessToken, messageId, geminiApiKey })
   await dedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), captured: true });
 }
 
+/** Move an unassigned email into a project's emails subcollection. Admin only. */
+exports.assignUnassignedEmail = onCall(async (request) => {
+  const { auth, data } = request;
+  if (!auth) {
+    throw new Error('Authentication required');
+  }
+  const callerRecord = await admin.auth().getUser(auth.uid);
+  const callerClaims = callerRecord.customClaims || {};
+  if (callerClaims.role !== 'admin' || callerClaims.status !== 'approved') {
+    throw new Error('Admin privileges required');
+  }
+
+  const { emailId, projectId } = data;
+  if (!emailId || !projectId) {
+    throw new Error('emailId and projectId are required');
+  }
+
+  const db = admin.firestore();
+  const unassignedRef = db.collection('unassignedEmails').doc(emailId);
+  const snap = await unassignedRef.get();
+  if (!snap.exists) {
+    throw new Error('Email not found');
+  }
+  const { candidateProjectIds, ...emailData } = snap.data();
+  const projectEmailRef = db.collection('projects').doc(projectId).collection('emails').doc(emailId);
+
+  await db.runTransaction(async (tx) => {
+    tx.set(projectEmailRef, {
+      ...emailData,
+      matchedStakeholderEmails: [emailData.from, ...(emailData.to || []), ...(emailData.cc || [])]
+        .map((p) => p && p.email)
+        .filter(Boolean),
+    });
+    tx.delete(unassignedRef);
+  });
+
+  logger.info('assignUnassignedEmail: assigned', { emailId, projectId, by: auth.uid });
+  return { success: true };
+});
+
+/** Discard an unassigned email that isn't actually project-related. Admin only. */
+exports.discardUnassignedEmail = onCall(async (request) => {
+  const { auth, data } = request;
+  if (!auth) {
+    throw new Error('Authentication required');
+  }
+  const callerRecord = await admin.auth().getUser(auth.uid);
+  const callerClaims = callerRecord.customClaims || {};
+  if (callerClaims.role !== 'admin' || callerClaims.status !== 'approved') {
+    throw new Error('Admin privileges required');
+  }
+
+  const { emailId } = data;
+  if (!emailId) {
+    throw new Error('emailId is required');
+  }
+
+  await admin.firestore().collection('unassignedEmails').doc(emailId).delete();
+  logger.info('discardUnassignedEmail: discarded', { emailId, by: auth.uid });
+  return { success: true };
+});
+
 /**
  * Generate Purchase Order PDF
  * Creates a professional PO document and stores it in Firebase Storage
