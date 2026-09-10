@@ -4550,7 +4550,7 @@ async function syncOneGmailAccount({ db, connectionRef, connection, clientId, cl
 async function processGmailMessage({ db, accessToken, messageId, geminiApiKey }) {
   const dedupRef = db.collection('gmailIngestedMessages').doc(messageId);
   const dedupSnap = await dedupRef.get();
-  if (dedupSnap.exists) return;
+  if (dedupSnap.exists) return false;
 
   const resource = await getGmailMessage({ accessToken, messageId, fetchImpl: fetch });
 
@@ -4558,7 +4558,7 @@ async function processGmailMessage({ db, accessToken, messageId, geminiApiKey })
   if (labels.has('DRAFT') || labels.has('SPAM') || labels.has('TRASH') || labels.has('CHAT')) {
     // Drafts/spam/trash/chat are never real captured correspondence.
     await dedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), captured: false });
-    return;
+    return false;
   }
 
   const parsed = parseGmailMessage(resource);
@@ -4567,7 +4567,7 @@ async function processGmailMessage({ db, accessToken, messageId, geminiApiKey })
   if (!hasExternalParticipant(participants)) {
     // Purely internal thread: never written anywhere, not even unassignedEmails.
     await dedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), captured: false });
-    return;
+    return false;
   }
 
   // A physical message can arrive under a different Gmail message id in each
@@ -4581,7 +4581,7 @@ async function processGmailMessage({ db, accessToken, messageId, geminiApiKey })
   const globalDedupSnap = await globalDedupRef.get();
   if (globalDedupSnap.exists) {
     await dedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), captured: false });
-    return;
+    return false;
   }
 
   const externalEmails = getExternalParticipantEmails(participants);
@@ -4628,6 +4628,7 @@ async function processGmailMessage({ db, accessToken, messageId, geminiApiKey })
 
   await dedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), captured: true });
   await globalDedupRef.set({ ingestedAt: admin.firestore.FieldValue.serverTimestamp(), gmailMessageId: parsed.gmailMessageId });
+  return matchedProjectIds.length === 1;
 }
 
 /** Move an unassigned email into a project's emails subcollection. Admin only. */
