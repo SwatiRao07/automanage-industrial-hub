@@ -40,6 +40,6 @@ test('gmailContactDirectory and gmailContactDiscoveryJobs are readable only by t
 test('emailBackfillJobs is readable by project members and admins, never client-writable', () => {
   assert.match(
     rules,
-    /match \/emailBackfillJobs\/\{projectId\} \{[\s\S]{0,600}?allow read: if request\.auth != null[\s\S]{0,500}?allow write: if false;/
+    /match \/emailBackfillJobs\/\{projectId\} \{[\s\S]{0,600}?allow read: if request\.auth != null[\s\S]{0,200}?request\.auth\.token\.role == 'admin'[\s\S]{0,300}?memberIds[\s\S]{0,300}?allow write: if false;/
   );
 });
