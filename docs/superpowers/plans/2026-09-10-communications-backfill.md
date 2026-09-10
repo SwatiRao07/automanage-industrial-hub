@@ -32,7 +32,7 @@
 
 **Interfaces:**
 - Consumes: `parseAddressList`, `filterExternalParticipants`, `getEmailDomain` from `functions/emailIngestion.js` (already exported).
-- Produces: `extractExternalParticipantsFromHeaders(headers) => [{name, email}]`, `mergeParticipantsIntoAccumulator(accumulator, participants, seenAtIso) => accumulator`, `buildContactDirectory(accumulator) => [{email, name, domain, messageCount, lastSeenAt}]`, `chunkArray(items, size) => items[][]`, `formatGmailDate(date) => 'YYYY/MM/DD'`, `buildBackfillSearchQuery(contactEmails, sinceDate) => string`. Consumed by Task 4 (`processContactDiscoveryJobs`) and Task 7 (`processEmailBackfillJobs`).
+- Produces: `extractExternalParticipantsFromHeaders(headers) => [{name, email}]`, `mergeParticipantsIntoAccumulator(accumulator, participants, seenAtIso) => accumulator`, `buildContactDirectory(accumulator) => [{email, name, domain, messageCount, lastSeenAt}]`, `formatGmailDate(date) => 'YYYY/MM/DD'`, `buildBackfillSearchQuery(contactEmails, sinceDate) => string`. Consumed by Task 4 (`processContactDiscoveryJobs`) and Task 7 (`processEmailBackfillJobs`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -44,7 +44,6 @@ const {
   extractExternalParticipantsFromHeaders,
   mergeParticipantsIntoAccumulator,
   buildContactDirectory,
-  chunkArray,
   formatGmailDate,
   buildBackfillSearchQuery,
 } = require('./contactDiscovery');
@@ -102,11 +101,6 @@ test('buildContactDirectory converts the accumulator into a domain-tagged list s
     { email: 'b@y.com', name: 'B', domain: 'y.com', messageCount: 5, lastSeenAt: '2026-01-02T00:00:00.000Z' },
     { email: 'a@x.com', name: 'A', domain: 'x.com', messageCount: 1, lastSeenAt: '2026-01-01T00:00:00.000Z' },
   ]);
-});
-
-test('chunkArray splits into fixed-size groups, with a shorter final group', () => {
-  assert.deepEqual(chunkArray([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
-  assert.deepEqual(chunkArray([], 2), []);
 });
 
 test('formatGmailDate formats a UTC date as Gmail search syntax (YYYY/MM/DD)', () => {
@@ -178,15 +172,6 @@ function buildContactDirectory(accumulator) {
     .sort((a, b) => b.messageCount - a.messageCount);
 }
 
-/** Split an array into fixed-size chunks (Gmail search queries are batched to stay under the query-length limit). */
-function chunkArray(items, size) {
-  const chunks = [];
-  for (let i = 0; i < items.length; i += size) {
-    chunks.push(items.slice(i, i + size));
-  }
-  return chunks;
-}
-
 /** Format a Date as Gmail search syntax's after:/before: date (UTC, YYYY/MM/DD). */
 function formatGmailDate(date) {
   const d = date instanceof Date ? date : new Date(date);
@@ -206,7 +191,6 @@ module.exports = {
   extractExternalParticipantsFromHeaders,
   mergeParticipantsIntoAccumulator,
   buildContactDirectory,
-  chunkArray,
   formatGmailDate,
   buildBackfillSearchQuery,
 };
@@ -215,7 +199,7 @@ module.exports = {
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `node --test functions/contactDiscovery.test.js`
-Expected: PASS (9 tests)
+Expected: PASS (8 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -627,15 +611,15 @@ git commit -m "feat: add startContactDiscovery callable and processContactDiscov
 ### Task 5: `processGmailMessage` reports whether it matched a project
 
 **Files:**
-- Modify: `functions/index.js:4422-4503`
+- Modify: `functions/index.js` (the `processGmailMessage` function)
 
 **Interfaces:**
 - Consumes: nothing new.
-- Produces: `processGmailMessage({ db, accessToken, messageId, geminiApiKey }) => Promise<boolean>` (previously returned `undefined`/no value; now resolves `true` when the message was matched to exactly one project, `false` for every other outcome — dropped as drafts/spam/internal-only, unassigned, or already deduped). Consumed by Task 7 (`processEmailBackfillJobs`, for `matchedCount`). `syncOneGmailAccount`'s existing call site (`functions/index.js:4413`) already discards the return value, so this is a purely additive change with no other callers to update.
+- Produces: `processGmailMessage({ db, accessToken, messageId, geminiApiKey }) => Promise<boolean>` (previously returned `undefined`/no value; now resolves `true` when the message was matched to exactly one project, `false` for every other outcome — dropped as drafts/spam/internal-only, unassigned, or already deduped). Consumed by Task 7 (`processEmailBackfillJobs`, for `matchedCount`). `syncOneGmailAccount`'s existing call site already discards the return value, so this is a purely additive change with no other callers to update.
 
 - [ ] **Step 1: Add return values**
 
-In `functions/index.js`, `processGmailMessage` currently has four `return;` statements (drafts/spam/trash/chat, purely-internal, per-mailbox dedup hit, global dedup hit) and one implicit fall-through after filing the message. Change each:
+In `functions/index.js`, locate `processGmailMessage` by name (Task 4's additions earlier in the file will have shifted its original line numbers — use Grep for `async function processGmailMessage`, don't trust a stale line number). It currently has four `return;` statements (drafts/spam/trash/chat, purely-internal, per-mailbox dedup hit, global dedup hit) and one implicit fall-through after filing the message. Change each:
 
 ```js
   if (labels.has('DRAFT') || labels.has('SPAM') || labels.has('TRASH') || labels.has('CHAT')) {
