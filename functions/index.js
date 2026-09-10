@@ -4454,6 +4454,87 @@ async function processOneContactDiscoveryJob({ db, uid, jobRef, job, clientId, c
 }
 
 /**
+ * Merge the given contacts into a project's externalRecipients (as
+ * non-notifying stakeholders, so they become stakeholder-matchable without
+ * being opted into BOM-change emails) and queue an email backfill job for
+ * whichever of them haven't already been backfilled. Project-member gated.
+ */
+exports.addProjectBackfillStakeholders = onCall(async (request) => {
+  const { auth, data } = request;
+  if (!auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+  if (auth.token.status !== 'approved') {
+    throw new functions.https.HttpsError('permission-denied', 'Approved access is required');
+  }
+
+  const { projectId, contacts } = data || {};
+  if (!projectId || !Array.isArray(contacts) || contacts.length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'projectId and a non-empty contacts array are required');
+  }
+
+  const db = admin.firestore();
+  const projectRef = db.collection('projects').doc(projectId);
+  const projectSnap = await projectRef.get();
+  if (!projectSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Project not found');
+  }
+  const project = projectSnap.data();
+  const isAdmin = auth.token.role === 'admin';
+  const isMember = !project.memberIds || project.memberIds.includes(auth.uid);
+  if (!isAdmin && !isMember) {
+    throw new functions.https.HttpsError('permission-denied', 'You are not a member of this project');
+  }
+
+  const normalizedContacts = contacts
+    .map((c) => ({ email: String((c && c.email) || '').toLowerCase().trim(), name: String((c && c.name) || '').trim() }))
+    .filter((c) => c.email);
+  if (normalizedContacts.length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'No valid contact emails provided');
+  }
+
+  const existingRecipients = project.externalRecipients || [];
+  const existingEmails = new Set(existingRecipients.map((r) => r.email.toLowerCase()));
+  const newRecipients = normalizedContacts
+    .filter((c) => !existingEmails.has(c.email))
+    .map((c) => ({ email: c.email, name: c.name, notificationsEnabled: false }));
+  if (newRecipients.length > 0) {
+    await projectRef.set(
+      { externalRecipients: [...existingRecipients, ...newRecipients] },
+      { merge: true }
+    );
+  }
+
+  const alreadyBackfilled = new Set(project.backfilledContactEmails || []);
+  const pendingContactEmails = normalizedContacts.map((c) => c.email).filter((email) => !alreadyBackfilled.has(email));
+  if (pendingContactEmails.length === 0) {
+    return { queuedContactCount: 0 };
+  }
+
+  const jobRef = db.collection('emailBackfillJobs').doc(projectId);
+  await db.runTransaction(async (tx) => {
+    const jobSnap = await tx.get(jobRef);
+    const existingJob = jobSnap.exists ? jobSnap.data() : null;
+    const combinedContacts = new Set((existingJob && existingJob.contacts) || []);
+    for (const email of pendingContactEmails) combinedContacts.add(email);
+
+    tx.set(jobRef, {
+      status: 'pending',
+      contacts: [...combinedContacts],
+      completedContacts: (existingJob && existingJob.completedContacts) || [],
+      sinceDate: (existingJob && existingJob.sinceDate) || new Date(Date.now() - BACKFILL_LOOKBACK_MS),
+      processedCount: (existingJob && existingJob.processedCount) || 0,
+      matchedCount: (existingJob && existingJob.matchedCount) || 0,
+      requestedByUid: auth.uid,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+
+  logger.info('addProjectBackfillStakeholders: queued', { projectId, queuedContactCount: pendingContactEmails.length, by: auth.uid });
+  return { queuedContactCount: pendingContactEmails.length };
+});
+
+/**
  * Poll every connected Gmail account for new messages every 10 minutes.
  * Applies the capture-scope guard, matches external participants against
  * stakeholderIndex (reusing collectMatchedProjectIds unchanged — spec §3),
