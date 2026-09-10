@@ -4630,6 +4630,67 @@ async function processOneEmailBackfillJob({ db, projectId, jobRef, job, clientId
 }
 
 /**
+ * Permanently remove a captured email/meeting from a project's Communications
+ * tab. No "excluded" flag is needed: the pre-existing gmailIngestedMessages /
+ * fathomIngestedMeetings dedup marker for this id was already written at
+ * first ingestion and is never deleted, so live sync and any future backfill
+ * already skip re-writing it (see spec Design §6). Project-member gated,
+ * since this is curation of a project's own data, not cross-project triage.
+ */
+async function assertProjectMember(db, projectId, auth) {
+  const projectSnap = await db.collection('projects').doc(projectId).get();
+  if (!projectSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Project not found');
+  }
+  const project = projectSnap.data();
+  const isAdmin = auth.token.role === 'admin';
+  const isMember = !project.memberIds || project.memberIds.includes(auth.uid);
+  if (!isAdmin && !isMember) {
+    throw new functions.https.HttpsError('permission-denied', 'You are not a member of this project');
+  }
+}
+
+exports.deleteProjectEmail = onCall(async (request) => {
+  const { auth, data } = request;
+  if (!auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+  if (auth.token.status !== 'approved') {
+    throw new functions.https.HttpsError('permission-denied', 'Approved access is required');
+  }
+  const { projectId, messageId } = data || {};
+  if (!projectId || !messageId) {
+    throw new functions.https.HttpsError('invalid-argument', 'projectId and messageId are required');
+  }
+
+  const db = admin.firestore();
+  await assertProjectMember(db, projectId, auth);
+  await db.collection('projects').doc(projectId).collection('emails').doc(messageId).delete();
+  logger.info('deleteProjectEmail: deleted', { projectId, messageId, by: auth.uid });
+  return { success: true };
+});
+
+exports.deleteProjectMeeting = onCall(async (request) => {
+  const { auth, data } = request;
+  if (!auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+  if (auth.token.status !== 'approved') {
+    throw new functions.https.HttpsError('permission-denied', 'Approved access is required');
+  }
+  const { projectId, meetingId } = data || {};
+  if (!projectId || !meetingId) {
+    throw new functions.https.HttpsError('invalid-argument', 'projectId and meetingId are required');
+  }
+
+  const db = admin.firestore();
+  await assertProjectMember(db, projectId, auth);
+  await db.collection('projects').doc(projectId).collection('meetings').doc(meetingId).delete();
+  logger.info('deleteProjectMeeting: deleted', { projectId, meetingId, by: auth.uid });
+  return { success: true };
+});
+
+/**
  * Poll every connected Gmail account for new messages every 10 minutes.
  * Applies the capture-scope guard, matches external participants against
  * stakeholderIndex (reusing collectMatchedProjectIds unchanged — spec §3),
