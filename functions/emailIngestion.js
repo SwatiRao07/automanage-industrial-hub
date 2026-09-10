@@ -350,6 +350,39 @@ Do not add a greeting, sign-off, or any content that was not already present in 
   }
 }
 
+/** List message ids matching a Gmail search query (messages.list), one page per call. */
+async function searchGmailMessageIds({ accessToken, query, pageToken, fetchImpl }) {
+  const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
+  url.searchParams.set('q', query);
+  url.searchParams.set('maxResults', '50');
+  if (pageToken) url.searchParams.set('pageToken', pageToken);
+
+  const response = await fetchImpl(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!response.ok) {
+    throw new Error(`Gmail messages.list failed: ${response.status}`);
+  }
+  const payload = await response.json();
+  return {
+    messageIds: (payload.messages || []).map((m) => m.id),
+    nextPageToken: payload.nextPageToken || null,
+  };
+}
+
+/** Fetch only the From/To/Cc headers of a message — far cheaper than format=full, used for contact discovery. */
+async function getGmailMessageHeaders({ accessToken, messageId, fetchImpl }) {
+  const url = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`);
+  url.searchParams.set('format', 'metadata');
+  for (const header of ['From', 'To', 'Cc']) {
+    url.searchParams.append('metadataHeaders', header);
+  }
+  const response = await fetchImpl(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!response.ok) {
+    throw new Error(`Gmail messages.get (metadata) failed: ${response.status}`);
+  }
+  const payload = await response.json();
+  return (payload.payload && payload.payload.headers) || [];
+}
+
 module.exports = {
   INTERNAL_MAIL_DOMAINS,
   PERSONAL_MAIL_DOMAINS,
@@ -366,4 +399,6 @@ module.exports = {
   listNewGmailMessageIds,
   getGmailMessage,
   sanitizeEmailBody,
+  searchGmailMessageIds,
+  getGmailMessageHeaders,
 };

@@ -411,3 +411,69 @@ test('sanitizeEmailBody treats blank raw input as already-empty without calling 
   const result = await sanitizeEmailBody({ apiKey: 'test-key', rawBody: '   ', fetchImpl: async () => { throw new Error('should not be called'); } });
   assert.deepEqual(result, { body: '', sanitizeFailed: true });
 });
+
+const { searchGmailMessageIds, getGmailMessageHeaders } = require('./emailIngestion');
+
+test('searchGmailMessageIds lists message ids for a search query and returns the next page token', async () => {
+  const fetchImpl = async (url, options) => {
+    assert.match(String(url), /q=after%3A2025%2F09%2F10/);
+    assert.equal(options.headers.Authorization, 'Bearer token');
+    return {
+      ok: true,
+      json: async () => ({ messages: [{ id: 'm1' }, { id: 'm2' }], nextPageToken: 'p2' }),
+    };
+  };
+  const result = await searchGmailMessageIds({ accessToken: 'token', query: 'after:2025/09/10', fetchImpl });
+  assert.deepEqual(result, { messageIds: ['m1', 'm2'], nextPageToken: 'p2' });
+});
+
+test('searchGmailMessageIds includes pageToken when provided and returns null when there is no next page', async () => {
+  const fetchImpl = async (url) => {
+    assert.match(String(url), /pageToken=p2/);
+    return { ok: true, json: async () => ({ messages: [{ id: 'm3' }] }) };
+  };
+  const result = await searchGmailMessageIds({ accessToken: 'token', query: 'q', pageToken: 'p2', fetchImpl });
+  assert.deepEqual(result, { messageIds: ['m3'], nextPageToken: null });
+});
+
+test('searchGmailMessageIds returns an empty list when Gmail finds no matches', async () => {
+  const fetchImpl = async () => ({ ok: true, json: async () => ({}) });
+  const result = await searchGmailMessageIds({ accessToken: 'token', query: 'q', fetchImpl });
+  assert.deepEqual(result, { messageIds: [], nextPageToken: null });
+});
+
+test('searchGmailMessageIds throws on a failed request', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 500 });
+  await assert.rejects(
+    () => searchGmailMessageIds({ accessToken: 'token', query: 'q', fetchImpl }),
+    /Gmail messages.list failed: 500/
+  );
+});
+
+test('getGmailMessageHeaders fetches metadata-format headers only', async () => {
+  const fetchImpl = async (url, options) => {
+    assert.match(String(url), /messages\/msg_1/);
+    assert.match(String(url), /format=metadata/);
+    assert.match(String(url), /metadataHeaders=From/);
+    assert.match(String(url), /metadataHeaders=To/);
+    assert.match(String(url), /metadataHeaders=Cc/);
+    assert.equal(options.headers.Authorization, 'Bearer token');
+    return { ok: true, json: async () => ({ payload: { headers: [{ name: 'From', value: 'a@x.com' }] } }) };
+  };
+  const result = await getGmailMessageHeaders({ accessToken: 'token', messageId: 'msg_1', fetchImpl });
+  assert.deepEqual(result, [{ name: 'From', value: 'a@x.com' }]);
+});
+
+test('getGmailMessageHeaders returns an empty array when the payload has no headers', async () => {
+  const fetchImpl = async () => ({ ok: true, json: async () => ({}) });
+  const result = await getGmailMessageHeaders({ accessToken: 'token', messageId: 'msg_1', fetchImpl });
+  assert.deepEqual(result, []);
+});
+
+test('getGmailMessageHeaders throws on a failed request', async () => {
+  const fetchImpl = async () => ({ ok: false, status: 404 });
+  await assert.rejects(
+    () => getGmailMessageHeaders({ accessToken: 'token', messageId: 'msg_1', fetchImpl }),
+    /Gmail messages.get \(metadata\) failed: 404/
+  );
+});
