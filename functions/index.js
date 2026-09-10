@@ -42,7 +42,7 @@ const {
   getGmailMessage,
   parseGmailMessage,
   hasExternalParticipant,
-  filterExternalParticipants,
+  getExternalParticipantEmails,
   classifyDirection,
   sanitizeEmailBody,
 } = require('./emailIngestion');
@@ -4145,7 +4145,10 @@ exports.fathomMeetingWebhook = onRequest(
       return;
     }
 
-    const attendeeEmails = meeting.attendees.map((a) => a.email);
+    // Internal project members commonly belong to several projects. Matching
+    // only external attendees prevents one employee from making an otherwise
+    // clear customer meeting ambiguous across every project they belong to.
+    const attendeeEmails = getExternalParticipantEmails(meeting.attendees);
     const lookups = await Promise.all(
       [...new Set(attendeeEmails.map((e) => String(e || '').toLowerCase().trim()).filter(Boolean))]
         .map(async (email) => {
@@ -4453,7 +4456,7 @@ async function processGmailMessage({ db, accessToken, messageId, geminiApiKey })
     return;
   }
 
-  const externalEmails = filterExternalParticipants(participants).map((p) => p.email);
+  const externalEmails = getExternalParticipantEmails(participants);
   const lookups = await Promise.all(
     [...new Set(externalEmails.map((e) => String(e || '').toLowerCase().trim()).filter(Boolean))]
       .map(async (email) => {

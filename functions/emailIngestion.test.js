@@ -6,6 +6,7 @@ const {
   parseAddressList,
   hasExternalParticipant,
   filterExternalParticipants,
+  getExternalParticipantEmails,
   classifyDirection,
   INTERNAL_MAIL_DOMAINS,
   PERSONAL_MAIL_DOMAINS,
@@ -66,6 +67,17 @@ test('filterExternalParticipants keeps only non-internal-domain participants', (
     { email: '' },
   ]);
   assert.deepEqual(result, [{ email: 'jane@clientco.com', name: 'Jane' }]);
+});
+
+test('getExternalParticipantEmails returns normalized unique external addresses only', () => {
+  const result = getExternalParticipantEmails([
+    { email: 'Owner@QualitasTech.com' },
+    { email: ' Client@One.example ' },
+    { email: 'client@one.example' },
+    { email: 'second@two.example' },
+    { email: '' },
+  ]);
+  assert.deepEqual(result, ['client@one.example', 'second@two.example']);
 });
 
 test('classifyDirection is outbound for an internal-domain sender, inbound otherwise', () => {

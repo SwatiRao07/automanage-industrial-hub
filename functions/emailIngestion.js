@@ -71,6 +71,15 @@ function filterExternalParticipants(participants) {
   return (participants || []).filter((p) => p && p.email && !isInternalDomain(p.email));
 }
 
+/** Lowercased, deduplicated external participant addresses for project matching. */
+function getExternalParticipantEmails(participants) {
+  return [...new Set(
+    filterExternalParticipants(participants)
+      .map((participant) => String(participant.email || '').toLowerCase().trim())
+      .filter(Boolean)
+  )];
+}
+
 /** 'outbound' if the sender is on an internal domain, 'inbound' otherwise. */
 function classifyDirection(fromEmail) {
   return isInternalDomain(fromEmail) ? 'outbound' : 'inbound';
@@ -348,6 +357,7 @@ module.exports = {
   parseAddressList,
   hasExternalParticipant,
   filterExternalParticipants,
+  getExternalParticipantEmails,
   classifyDirection,
   parseGmailMessage,
   stripQuotedHistory,
