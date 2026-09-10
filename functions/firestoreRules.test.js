@@ -26,3 +26,20 @@ test('server-only communication collections cannot be opened by an authenticated
     );
   }
 });
+
+test('gmailContactDirectory and gmailContactDiscoveryJobs are readable only by their own uid, never client-writable', () => {
+  for (const collection of ['gmailContactDirectory', 'gmailContactDiscoveryJobs']) {
+    assert.match(
+      rules,
+      new RegExp(`match /${collection}/\\{uid\\} \\{[\\s\\S]{0,300}?allow read: if request\\.auth != null[\\s\\S]{0,100}?request\\.auth\\.uid == uid[\\s\\S]{0,100}?allow write: if false;`),
+      `${collection} must be per-uid read-only`
+    );
+  }
+});
+
+test('emailBackfillJobs is readable by project members and admins, never client-writable', () => {
+  assert.match(
+    rules,
+    /match \/emailBackfillJobs\/\{projectId\} \{[\s\S]{0,600}?allow read: if request\.auth != null[\s\S]{0,500}?allow write: if false;/
+  );
+});

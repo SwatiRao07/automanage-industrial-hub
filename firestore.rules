@@ -96,6 +96,31 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Contact-discovery directory and job state are per-user and only ever
+    // written by processContactDiscoveryJobs (Admin SDK). The owning user can
+    // read their own directory/job to show scan progress and the picker.
+    match /gmailContactDirectory/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /gmailContactDiscoveryJobs/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Backfill job state, one doc per project. Project members can read it to
+    // show progress; only addProjectBackfillStakeholders / processEmailBackfillJobs
+    // (Admin SDK) ever write it.
+    match /emailBackfillJobs/{projectId} {
+      allow read: if request.auth != null
+        && request.auth.token.status == 'approved'
+        && (request.auth.token.role == 'admin'
+            || get(/databases/$(database)/documents/projects/$(projectId)).data.memberIds == null
+            || request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberIds);
+      allow write: if false;
+    }
+
     // Admins can inspect triage queues, but assignment/discard writes must go
     // through the authorization checks in their callable functions.
     match /unassignedEmails/{document=**} {
