@@ -20,6 +20,11 @@ import { TranscriptPasteDialog } from "@/components/Transcripts";
 import { useAuth } from "@/hooks/useAuth";
 import { isInternalUser } from "@/utils/accessControl";
 
+/** An Archived project stays hidden from the list unless it has an active support profile (still reachable via Support). */
+export const isProjectVisibleInList = (project: Pick<FirestoreProject, 'status' | 'supportProfile'>): boolean => {
+  return project.status !== 'Archived' || !!project.supportProfile;
+};
+
 const Projects = () => {
   const { user, isAdmin } = useAuth();
   const isPartner = !!user && !isAdmin && !isInternalUser(user.email ?? '');
@@ -177,12 +182,11 @@ const Projects = () => {
   };
 
   // Derive the filtered list only when data or filters change.
-  // Archived projects are hidden by default
+  // Archived projects are hidden by default, unless they're now in Support.
   const filteredProjects = useMemo(() => {
     const normalizedQuery = searchQuery.toLowerCase().trim();
     return projects.filter((project) => {
-      // Always hide archived projects
-      if (project.status === "Archived") return false;
+      if (!isProjectVisibleInList(project)) return false;
 
       const projectName = project.projectName?.toLowerCase() ?? "";
       const clientName = project.clientName?.toLowerCase() ?? "";
