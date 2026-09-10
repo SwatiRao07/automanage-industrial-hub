@@ -74,7 +74,7 @@ New dialog (opened from a "Backfill Communications" button on `ProjectCommunicat
 ### 4. Persisting stakeholders + queuing backfill
 
 `addProjectBackfillStakeholders(projectId, emails[])` (onCall, project-member gated):
-- Merges `emails` into `project.externalRecipients` (dedup by email) — this flows into `stakeholderIndex` via the existing `syncStakeholderIndex` trigger unchanged, so live sync starts covering these contacts immediately.
+- Merges `emails` into `project.externalRecipients` (dedup by email, `notificationsEnabled: false` — confirmed during planning that `externalRecipients` doubles as the BOM-change-notification recipient list via `getNotificationRecipients`; a discovered contact should become stakeholder-matchable without being silently opted into BOM update emails) — this flows into `stakeholderIndex` via the existing `syncStakeholderIndex` trigger unchanged, so live sync starts covering these contacts immediately.
 - Diffs `emails` against `project.backfilledContactEmails` to find genuinely new contacts.
 - Upserts `emailBackfillJobs/{projectId}`, appending the new contacts to its queue (an existing in-progress job for the same project is extended rather than duplicated).
 
@@ -94,23 +94,23 @@ interface EmailBackfillJob {
   updatedAt: Timestamp;
 }
 ```
-`processEmailBackfillJobs` (`onSchedule`, ~5-10 min): for each `pending`/`running` job, batches up to ~25 remaining contacts into one Gmail search query — `(from:a OR to:a OR from:b OR to:b ...) after:YYYY/MM/DD` — pages through results, and for each message: skip if `gmailIngestedMessages/{id}` exists (either already ingested or `excluded: true`), otherwise runs the **same** capture-scope-guard → `sanitizeEmailBody` → store-to-`projects/{id}/emails` logic already used by live sync (extracted as a shared helper if not already factored out), then writes the `gmailIngestedMessages/{id}` marker. Advances `pageToken`/`completedContacts` as it goes; marks a contact batch done and moves to the next when exhausted. On full completion: `project.backfilledContactEmails` is updated, job `status: 'completed'`.
+`processEmailBackfillJobs` (`onSchedule`, ~5-10 min): for each `pending`/`running` job, batches up to ~25 remaining contacts into one Gmail search query — `(from:a OR to:a OR from:b OR to:b ...) after:YYYY/MM/DD` — pages through matching message ids (via `messages.list?q=...`, the same mechanism Gmail search uses generally, distinct from the History API live sync uses), and for each message id calls the **existing** `processGmailMessage({ db, accessToken, messageId, geminiApiKey })` (`functions/index.js`) completely unchanged — it already dedups against `gmailIngestedMessages`, applies the capture-scope guard, matches via `stakeholderIndex`, sanitizes, and stores to `projects/{id}/emails` or `unassignedEmails`, regardless of whether the message id came from history sync or a backfill search. Advances `pageToken`/`completedContacts` as it goes; marks a contact batch done and moves to the next when exhausted. On full completion: `project.backfilledContactEmails` is updated, job `status: 'completed'`.
+
+The Gmail account used for the search is the same one the requesting admin connected for discovery (`emailBackfillJobs.requestedByUid` → `gmailConnections/{uid}`), consistent with discovery scope being that admin's own mailbox (Decision 1).
 
 On a Gmail API failure mid-job: `status: 'failed'` with `error` set, cursors preserved; a "Retry" action in the UI flips it back to `pending` so the scheduled processor resumes rather than restarting.
 
 ### 6. Delete / never-recapture
 
-`deleteProjectEmail(projectId, messageId)` / `deleteProjectMeeting(projectId, meetingId)` (onCall, gated to project members — the same access level that can view the tab, not admin-only, since this is curation of a project's own data rather than cross-project triage):
-- Deletes `projects/{projectId}/emails|meetings/{id}`.
-- Sets `excluded: true` on `gmailIngestedMessages/{messageId}` or `fathomIngestedMeetings/{meetingId}` respectively (creating the marker doc if it doesn't already exist, e.g. for a meeting ingested before this field existed).
+`deleteProjectEmail(projectId, messageId)` / `deleteProjectMeeting(projectId, meetingId)` (onCall, gated to project members — the same access level that can view the tab, not admin-only, since this is curation of a project's own data rather than cross-project triage): deletes `projects/{projectId}/emails|meetings/{id}`.
 
-Both live sync (`processGmailMessage`, the Fathom webhook handler) and the new backfill processor check `excluded` on the marker before writing a message/meeting to any project, so a deleted item can never resurface.
+No new "excluded" field is needed: both `processGmailMessage` (live sync, and reused unchanged by the backfill processor — see §5) and the Fathom webhook handler already check a permanent dedup marker (`gmailIngestedMessages/{messageId}` / `fathomIngestedMeetings/{meetingId}`) *before* ever writing a message/meeting anywhere, and that marker is written once at first ingestion and never deleted. Deleting the project doc leaves its dedup marker in place, so the same Gmail message id or Fathom recording id can never be (re-)written again by live sync or by a future backfill run — confirmed by reading the current implementation (`functions/index.js`) during implementation planning.
 
 UI: a trash icon on each Communications-tab card opens the existing `AlertDialog` confirm pattern (same shape as `ArchiveProjectDialog`) — "Remove this email from the project? It won't be re-imported." — before calling the delete callable.
 
 ### 7. Support-project visibility
 
-Wherever the project detail view currently conditions which tabs render (to be located precisely during implementation planning), add: the Communications tab renders whenever `project.supportProfile` is populated, in addition to whatever condition already makes it render today — so a project that has moved into Support continues showing (and can still backfill/receive) its communications regardless of `status`.
+Confirmed during planning: the Communications tab itself (`src/pages/BOM.tsx`, rendered inside `ProjectCommunicationsTab`) is already gated only on `!isPartner` — no status check exists there. The actual gap is one level up: `src/pages/Projects.tsx` unconditionally hides every `Archived` project from the project list (`if (project.status === "Archived") return false;`, with the comment "Always hide archived projects"), so an archived project — including one that has since moved into Support — can never be navigated to at all, and its Communications tab (and everything else about it) becomes unreachable. The fix is narrowly there: keep hiding `Archived` projects by default, except when `project.supportProfile` is populated, in which case the project still appears in the list (and its BOM/Communications page remains reachable) regardless of status.
 
 ### 8. Security
 
