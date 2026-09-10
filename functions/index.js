@@ -54,6 +54,8 @@ const {
   buildContactDirectory,
   buildBackfillSearchQuery,
   formatGmailDate,
+  findUnresolvedContacts,
+  buildBackfillJobFields,
 } = require('./contactDiscovery');
 
 // Use built-in fetch in Node.js 22
@@ -4515,17 +4517,21 @@ exports.addProjectBackfillStakeholders = onCall(async (request) => {
   await db.runTransaction(async (tx) => {
     const jobSnap = await tx.get(jobRef);
     const existingJob = jobSnap.exists ? jobSnap.data() : null;
-    const combinedContacts = new Set((existingJob && existingJob.contacts) || []);
-    for (const email of pendingContactEmails) combinedContacts.add(email);
 
     tx.set(jobRef, {
-      status: 'pending',
-      contacts: [...combinedContacts],
-      completedContacts: (existingJob && existingJob.completedContacts) || [],
-      sinceDate: (existingJob && existingJob.sinceDate) || new Date(Date.now() - BACKFILL_LOOKBACK_MS),
-      processedCount: (existingJob && existingJob.processedCount) || 0,
-      matchedCount: (existingJob && existingJob.matchedCount) || 0,
-      requestedByUid: auth.uid,
+      ...buildBackfillJobFields({
+        existingJob,
+        pendingContactEmails,
+        requestedByUid: auth.uid,
+        defaultSinceDate: new Date(Date.now() - BACKFILL_LOOKBACK_MS),
+      }),
+      // A Gmail pageToken is bound to the exact search query that produced
+      // it. We're always changing the contacts array here (guarded by
+      // pendingContactEmails.length > 0 above), which changes which contacts
+      // fall into the next batch processOneEmailBackfillJob searches — so any
+      // in-flight cursor for the old batch composition must be dropped rather
+      // than resumed.
+      pageToken: admin.firestore.FieldValue.delete(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true });
   });
@@ -4576,6 +4582,28 @@ async function processOneEmailBackfillJob({ db, projectId, jobRef, job, clientId
     return;
   }
 
+  const batch = remaining.slice(0, BACKFILL_CONTACTS_PER_BATCH);
+
+  // Safety net before spending any Gmail API calls this tick: confirm every
+  // contact in this tick's batch actually resolves to this project via
+  // stakeholderIndex. addProjectBackfillStakeholders writes these contacts
+  // into project.externalRecipients synchronously, but stakeholderIndex is
+  // populated by an async Firestore trigger that isn't guaranteed to have
+  // caught up yet — see findUnresolvedContacts in contactDiscovery.js for why
+  // that matters (misrouted messages can never be recaptured). If any
+  // contact isn't resolved yet, defer this tick without touching pageToken/
+  // completedContacts/processedCount so it's retried once the index catches up.
+  const indexSnaps = await Promise.all(batch.map((email) => db.collection('stakeholderIndex').doc(email).get()));
+  const emailToProjectIds = Object.fromEntries(
+    batch.map((email, i) => [email.toLowerCase().trim(), indexSnaps[i].exists ? (indexSnaps[i].data().projectIds || []) : []])
+  );
+  const unresolved = findUnresolvedContacts(batch, projectId, emailToProjectIds);
+  if (unresolved.length > 0) {
+    logger.warn('processEmailBackfillJobs: stakeholderIndex not yet caught up, deferring tick', { projectId, unresolved });
+    await jobRef.set({ status: 'pending', updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    return;
+  }
+
   const connectionSnap = await db.collection('gmailConnections').doc(job.requestedByUid).get();
   if (!connectionSnap.exists || connectionSnap.data().status !== 'connected') {
     await jobRef.set({ status: 'failed', error: 'Gmail account is no longer connected' }, { merge: true });
@@ -4585,7 +4613,6 @@ async function processOneEmailBackfillJob({ db, projectId, jobRef, job, clientId
     refreshToken: connectionSnap.data().refreshToken, clientId, clientSecret, fetchImpl: fetch,
   });
 
-  const batch = remaining.slice(0, BACKFILL_CONTACTS_PER_BATCH);
   const query = buildBackfillSearchQuery(batch, job.sinceDate.toDate());
   let pageToken = job.pageToken || undefined;
   let processedCount = job.processedCount || 0;
