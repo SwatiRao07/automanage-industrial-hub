@@ -25,7 +25,7 @@ interface BackfillCommunicationsDialogProps {
   onConfirm: (contacts: { email: string; name?: string }[]) => void;
 }
 
-type Phase = 'checking-connection' | 'not-connected' | 'discovering' | 'selecting' | 'confirming';
+type Phase = 'checking-connection' | 'not-connected' | 'discovering' | 'selecting' | 'confirming' | 'failed';
 
 export function BackfillCommunicationsDialog({
   open,
@@ -42,6 +42,8 @@ export function BackfillCommunicationsDialog({
   const [selected, setSelected] = useState<Set<string>>(new Set(alreadyBackfilledEmails));
   const [otherOpen, setOtherOpen] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState<string | undefined>(undefined);
+  const [retryToken, setRetryToken] = useState(0);
 
   const uid = user?.uid;
 
@@ -50,8 +52,52 @@ export function BackfillCommunicationsDialog({
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
 
+    const loadDirectory = async () => {
+      const directory = await getGmailContactDirectory(uid);
+      if (!cancelled) {
+        setContacts(directory?.contacts || []);
+        setPhase('selecting');
+      }
+    };
+
+    // Kick off (or resume) discovery and drive the dialog off its outcome.
+    // startContactDiscovery's own return value tells us the immediate next
+    // step: 'ready' means a fresh directory already exists and the callable
+    // short-circuited without touching the job doc at all, so we must not
+    // wait on a job-doc transition (a stale 'failed' doc from a previous run
+    // could sit there forever and get misread as this attempt failing).
+    // Only when it returns 'scanning' do we subscribe to the job doc for
+    // progress, and that subscription itself must treat both a 'failed'
+    // status and a missing/deleted job doc as a dead end requiring retry
+    // rather than a silent no-op (the forever-spinner this fixes).
+    const runDiscovery = async () => {
+      setPhase('discovering');
+      setDiscoveryError(undefined);
+      const { status } = await startContactDiscovery();
+      if (cancelled) return;
+      if (status === 'ready') {
+        await loadDirectory();
+        return;
+      }
+
+      unsubscribe = subscribeToContactDiscoveryJob(uid, async (job) => {
+        if (cancelled) return;
+        if (job === null || job.status === 'failed') {
+          setDiscoveryError(job?.error);
+          setPhase('failed');
+          return;
+        }
+        if (job.status === 'ready') {
+          await loadDirectory();
+        }
+        // status === 'scanning': stay on the 'discovering' phase, more
+        // progress updates will follow.
+      });
+    };
+
     (async () => {
       setPhase('checking-connection');
+      setStarting(false);
       const connection = await getGmailConnectionStatus();
       if (cancelled) return;
       if (!connection.connected || connection.status === 'needs_reconnect') {
@@ -63,28 +109,16 @@ export function BackfillCommunicationsDialog({
         const client = await getClient(clientId);
         if (!cancelled) setClientDomains(getClientDomains(client));
       }
-
-      setPhase('discovering');
-      await startContactDiscovery();
       if (cancelled) return;
 
-      unsubscribe = subscribeToContactDiscoveryJob(uid, async (job) => {
-        if (cancelled || !job) return;
-        if (job.status === 'ready') {
-          const directory = await getGmailContactDirectory(uid);
-          if (!cancelled) {
-            setContacts(directory?.contacts || []);
-            setPhase('selecting');
-          }
-        }
-      });
+      await runDiscovery();
     })();
 
     return () => {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [open, uid, clientId]);
+  }, [open, uid, clientId, retryToken]);
 
   const grouped = useMemo(() => groupContactsForPicker(contacts, clientDomains), [contacts, clientDomains]);
 
@@ -170,8 +204,20 @@ export function BackfillCommunicationsDialog({
           </div>
         )}
 
+        {phase === 'failed' && (
+          <div className="py-6 space-y-2 text-sm">
+            <p className="text-destructive">
+              {discoveryError || "We couldn't scan your mailbox for contacts."}
+            </p>
+            <p className="text-muted-foreground">You can try again.</p>
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          {phase === 'failed' && (
+            <Button onClick={() => setRetryToken((t) => t + 1)}>Retry</Button>
+          )}
           {phase === 'selecting' && (
             <Button disabled={selected.size === 0} onClick={() => setPhase('confirming')}>
               Continue ({selected.size} selected)
