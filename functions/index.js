@@ -45,7 +45,16 @@ const {
   getExternalParticipantEmails,
   classifyDirection,
   sanitizeEmailBody,
+  searchGmailMessageIds,
+  getGmailMessageHeaders,
 } = require('./emailIngestion');
+const {
+  extractExternalParticipantsFromHeaders,
+  mergeParticipantsIntoAccumulator,
+  buildContactDirectory,
+  buildBackfillSearchQuery,
+  formatGmailDate,
+} = require('./contactDiscovery');
 
 // Use built-in fetch in Node.js 22
 const fetch = globalThis.fetch;
@@ -4324,6 +4333,125 @@ exports.getGmailConnectionStatus = onCall(async (request) => {
     lastSyncedAt: data.lastSyncedAt ? data.lastSyncedAt.toDate().toISOString() : null,
   };
 });
+
+const CONTACT_DIRECTORY_STALE_MS = 30 * 24 * 60 * 60 * 1000;
+const BACKFILL_LOOKBACK_MS = 365 * 24 * 60 * 60 * 1000;
+const DISCOVERY_PAGES_PER_TICK = 2;
+
+/**
+ * Kick off (or resume) a one-time scan of the caller's own connected Gmail
+ * mailbox, building a reusable contact directory. Idempotent: a fresh
+ * directory (<30 days old) or an already-running scan is a no-op.
+ */
+exports.startContactDiscovery = onCall(async (request) => {
+  const { auth } = request;
+  if (!auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+  }
+  if (auth.token.status !== 'approved') {
+    throw new functions.https.HttpsError('permission-denied', 'Approved access is required');
+  }
+
+  const db = admin.firestore();
+  const connectionSnap = await db.collection('gmailConnections').doc(auth.uid).get();
+  if (!connectionSnap.exists || connectionSnap.data().status !== 'connected') {
+    throw new functions.https.HttpsError('failed-precondition', 'Connect Gmail in Settings before discovering contacts');
+  }
+
+  const directorySnap = await db.collection('gmailContactDirectory').doc(auth.uid).get();
+  const isFresh = directorySnap.exists
+    && directorySnap.data().lastScannedAt
+    && (Date.now() - directorySnap.data().lastScannedAt.toDate().getTime()) < CONTACT_DIRECTORY_STALE_MS;
+  if (isFresh) {
+    return { status: 'ready' };
+  }
+
+  const jobRef = db.collection('gmailContactDiscoveryJobs').doc(auth.uid);
+  const jobSnap = await jobRef.get();
+  if (jobSnap.exists && jobSnap.data().status === 'scanning') {
+    return { status: 'scanning' };
+  }
+
+  await jobRef.set({
+    status: 'scanning',
+    accumulated: {},
+    sinceDate: new Date(Date.now() - BACKFILL_LOOKBACK_MS),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { status: 'scanning' };
+});
+
+/** Advance every in-progress contact-discovery job by a bounded number of pages. */
+exports.processContactDiscoveryJobs = onSchedule(
+  {
+    schedule: 'every 5 minutes',
+    secrets: [googleOAuthClientId, googleOAuthClientSecret],
+    timeoutSeconds: 300,
+    memory: '512MiB',
+  },
+  async () => {
+    const db = admin.firestore();
+    const jobsSnap = await db.collection('gmailContactDiscoveryJobs').where('status', '==', 'scanning').get();
+    if (jobsSnap.empty) return;
+
+    const clientId = googleOAuthClientId.value();
+    const clientSecret = googleOAuthClientSecret.value();
+
+    for (const jobDoc of jobsSnap.docs) {
+      const uid = jobDoc.id;
+      try {
+        await processOneContactDiscoveryJob({ db, uid, jobRef: jobDoc.ref, job: jobDoc.data(), clientId, clientSecret });
+      } catch (error) {
+        logger.error('processContactDiscoveryJobs: job failed', { uid, error: error.message });
+        await jobDoc.ref.set({ status: 'failed', error: error.message }, { merge: true });
+      }
+    }
+  }
+);
+
+async function processOneContactDiscoveryJob({ db, uid, jobRef, job, clientId, clientSecret }) {
+  const connectionSnap = await db.collection('gmailConnections').doc(uid).get();
+  if (!connectionSnap.exists || connectionSnap.data().status !== 'connected') {
+    await jobRef.set({ status: 'failed', error: 'Gmail account is no longer connected' }, { merge: true });
+    return;
+  }
+  const { accessToken } = await refreshAccessToken({
+    refreshToken: connectionSnap.data().refreshToken, clientId, clientSecret, fetchImpl: fetch,
+  });
+
+  const query = `after:${formatGmailDate(job.sinceDate.toDate())}`;
+  const accumulated = job.accumulated || {};
+  let pageToken = job.pageToken || undefined;
+
+  // Bounded work per tick — the job resumes from pageToken on the next
+  // scheduled run, so a large mailbox finishes over several ticks safely
+  // within the function timeout.
+  for (let page = 0; page < DISCOVERY_PAGES_PER_TICK; page += 1) {
+    const { messageIds, nextPageToken } = await searchGmailMessageIds({ accessToken, query, pageToken, fetchImpl: fetch });
+    for (const messageId of messageIds) {
+      const headers = await getGmailMessageHeaders({ accessToken, messageId, fetchImpl: fetch });
+      const participants = extractExternalParticipantsFromHeaders(headers);
+      mergeParticipantsIntoAccumulator(accumulated, participants, new Date().toISOString());
+    }
+    pageToken = nextPageToken;
+    if (!pageToken) break;
+  }
+
+  if (pageToken) {
+    await jobRef.set(
+      { accumulated, pageToken, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    return;
+  }
+
+  await db.collection('gmailContactDirectory').doc(uid).set({
+    contacts: buildContactDirectory(accumulated),
+    scannedFromDate: job.sinceDate,
+    lastScannedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  await jobRef.set({ status: 'ready', updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+}
 
 /**
  * Poll every connected Gmail account for new messages every 10 minutes.
