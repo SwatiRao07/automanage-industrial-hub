@@ -66,3 +66,9 @@ export const discardUnassignedMeeting = async (meetingId: string): Promise<void>
   const fn = httpsCallable(functions, 'discardUnassignedMeeting');
   await fn({ meetingId });
 };
+
+/** Permanently remove a captured meeting from a project's Communications tab. Never re-captured (see spec). */
+export const deleteProjectMeeting = async (projectId: string, meetingId: string): Promise<void> => {
+  const fn = httpsCallable(functions, 'deleteProjectMeeting');
+  await fn({ projectId, meetingId });
+};

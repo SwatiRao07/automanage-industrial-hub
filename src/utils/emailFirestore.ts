@@ -68,6 +68,12 @@ export const discardUnassignedEmail = async (emailId: string): Promise<void> => 
   await fn({ emailId });
 };
 
+/** Permanently remove a captured email from a project's Communications tab. Never re-captured (see spec). */
+export const deleteProjectEmail = async (projectId: string, messageId: string): Promise<void> => {
+  const fn = httpsCallable(functions, 'deleteProjectEmail');
+  await fn({ projectId, messageId });
+};
+
 export interface GmailConnectionState {
   connected: boolean;
   email?: string;
