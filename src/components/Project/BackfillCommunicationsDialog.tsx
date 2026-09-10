@@ -41,6 +41,7 @@ export function BackfillCommunicationsDialog({
   const [contacts, setContacts] = useState<DiscoveredContact[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set(alreadyBackfilledEmails));
   const [otherOpen, setOtherOpen] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const uid = user?.uid;
 
@@ -158,11 +159,37 @@ export function BackfillCommunicationsDialog({
           </div>
         )}
 
+        {phase === 'confirming' && (
+          <div className="py-4 space-y-2 text-sm">
+            <p>
+              This will search the last <strong>12 months</strong> of your mailbox for messages
+              involving <strong>{selected.size} contact{selected.size === 1 ? '' : 's'}</strong> and
+              import any matches into this project.
+            </p>
+            <p className="text-muted-foreground">This can't be easily undone.</p>
+          </div>
+        )}
+
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           {phase === 'selecting' && (
             <Button disabled={selected.size === 0} onClick={() => setPhase('confirming')}>
               Continue ({selected.size} selected)
+            </Button>
+          )}
+          {phase === 'confirming' && (
+            <Button
+              disabled={starting}
+              onClick={() => {
+                setStarting(true);
+                const chosen = contacts
+                  .filter((c) => selected.has(c.email))
+                  .map((c) => ({ email: c.email, name: c.name || undefined }));
+                onConfirm(chosen);
+              }}
+            >
+              {starting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Start backfill
             </Button>
           )}
         </DialogFooter>

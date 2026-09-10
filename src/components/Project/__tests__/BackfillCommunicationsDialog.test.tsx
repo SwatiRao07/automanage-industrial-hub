@@ -65,3 +65,30 @@ describe('BackfillCommunicationsDialog', () => {
     expect(screen.getByRole('checkbox', { name: /jane@clientco.com/i })).toBeChecked();
   });
 });
+
+describe('BackfillCommunicationsDialog confirmation step', () => {
+  it('requires a second explicit confirmation naming the count and window before calling onConfirm', async () => {
+    const onConfirm = vi.fn();
+    render(
+      <BackfillCommunicationsDialog
+        open
+        onOpenChange={() => {}}
+        projectId="p1"
+        clientId="c1"
+        alreadyBackfilledEmails={[]}
+        onConfirm={onConfirm}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText(/jane@clientco.com/i)).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('checkbox', { name: /jane@clientco.com/i }));
+    await userEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+    expect(screen.getByText(/12 months/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 contact/i)).toBeInTheDocument();
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: /start backfill/i }));
+    expect(onConfirm).toHaveBeenCalledWith([{ email: 'jane@clientco.com', name: 'Jane' }]);
+  });
+});
