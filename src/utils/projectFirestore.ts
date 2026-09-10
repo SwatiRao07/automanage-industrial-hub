@@ -86,6 +86,9 @@ export interface Project {
   // Notification recipients who are not registered app users
   externalRecipients?: ExternalRecipient[];
 
+  // Contacts already backfilled for this project (Communications Backfill) — see docs/superpowers/specs/2026-09-10-communications-backfill-design.md
+  backfilledContactEmails?: string[];
+
   // Post-commissioning service and support configuration
   supportProfile?: SupportProjectProfile;
 }

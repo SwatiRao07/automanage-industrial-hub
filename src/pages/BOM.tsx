@@ -1145,7 +1145,13 @@ const BOM = () => {
 
               {/* Communications Tab */}
               <TabsContent value="communications" className="mt-0">
-                {projectId && <ProjectCommunicationsTab projectId={projectId} />}
+                {projectId && fullProject && (
+                  <ProjectCommunicationsTab
+                    projectId={projectId}
+                    project={fullProject}
+                    onProjectUpdated={(updated) => setFullProject(updated)}
+                  />
+                )}
               </TabsContent>
 
               {/* Context Tab - Project Intelligence for Transcripts */}
