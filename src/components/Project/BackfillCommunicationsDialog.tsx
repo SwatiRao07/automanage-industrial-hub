@@ -173,7 +173,9 @@ export function BackfillCommunicationsDialog({
               {discoveryProgress?.processedCount != null ? (
                 <>
                   Scanned {discoveryProgress.processedCount}
-                  {discoveryProgress.estimatedTotal ? ` of ~${discoveryProgress.estimatedTotal}` : ''} messages
+                  {discoveryProgress.estimatedTotal && discoveryProgress.estimatedTotal > discoveryProgress.processedCount
+                    ? ` of ~${discoveryProgress.estimatedTotal}`
+                    : ''} messages
                   {discoveryProgress.contactCount ? ` — ${discoveryProgress.contactCount} contacts found so far` : ''}
                 </>
               ) : (

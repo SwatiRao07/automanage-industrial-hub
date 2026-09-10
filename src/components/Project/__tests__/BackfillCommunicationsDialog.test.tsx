@@ -232,6 +232,29 @@ describe('BackfillCommunicationsDialog discovery progress', () => {
     await waitFor(() => expect(screen.getByText(/scanned 150 of ~2000 messages/i)).toBeInTheDocument());
     expect(screen.getByText(/42 contacts found so far/i)).toBeInTheDocument();
   });
+
+  it('drops the stale estimate once processedCount has exceeded it, instead of showing a nonsensical count', async () => {
+    vi.mocked(startContactDiscovery).mockResolvedValue({ status: 'scanning' });
+    vi.mocked(subscribeToContactDiscoveryJob).mockImplementation((_uid, cb) => {
+      cb({ status: 'scanning', processedCount: 300, estimatedTotal: 201, contactCount: 533 });
+      return () => {};
+    });
+
+    render(
+      <BackfillCommunicationsDialog
+        open
+        onOpenChange={() => {}}
+        projectId="p1"
+        clientId="c1"
+        alreadyBackfilledEmails={[]}
+        onConfirm={() => {}}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText(/scanned 300 messages/i)).toBeInTheDocument());
+    expect(screen.queryByText(/of ~201/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/533 contacts found so far/i)).toBeInTheDocument();
+  });
 });
 
 describe('BackfillCommunicationsDialog starting-state reset', () => {
