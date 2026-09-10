@@ -210,6 +210,30 @@ describe('BackfillCommunicationsDialog discovery dead-end states', () => {
   });
 });
 
+describe('BackfillCommunicationsDialog discovery progress', () => {
+  it('shows scanned/estimated message counts and contacts found while still scanning', async () => {
+    vi.mocked(startContactDiscovery).mockResolvedValue({ status: 'scanning' });
+    vi.mocked(subscribeToContactDiscoveryJob).mockImplementation((_uid, cb) => {
+      cb({ status: 'scanning', processedCount: 150, estimatedTotal: 2000, contactCount: 42 });
+      return () => {};
+    });
+
+    render(
+      <BackfillCommunicationsDialog
+        open
+        onOpenChange={() => {}}
+        projectId="p1"
+        clientId="c1"
+        alreadyBackfilledEmails={[]}
+        onConfirm={() => {}}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText(/scanned 150 of ~2000 messages/i)).toBeInTheDocument());
+    expect(screen.getByText(/42 contacts found so far/i)).toBeInTheDocument();
+  });
+});
+
 describe('BackfillCommunicationsDialog starting-state reset', () => {
   it('resets the disabled Start backfill button after the dialog is closed and reopened', async () => {
     const onConfirm = vi.fn();

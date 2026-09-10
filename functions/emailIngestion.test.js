@@ -420,11 +420,11 @@ test('searchGmailMessageIds lists message ids for a search query and returns the
     assert.equal(options.headers.Authorization, 'Bearer token');
     return {
       ok: true,
-      json: async () => ({ messages: [{ id: 'm1' }, { id: 'm2' }], nextPageToken: 'p2' }),
+      json: async () => ({ messages: [{ id: 'm1' }, { id: 'm2' }], nextPageToken: 'p2', resultSizeEstimate: 1234 }),
     };
   };
   const result = await searchGmailMessageIds({ accessToken: 'token', query: 'after:2025/09/10', fetchImpl });
-  assert.deepEqual(result, { messageIds: ['m1', 'm2'], nextPageToken: 'p2' });
+  assert.deepEqual(result, { messageIds: ['m1', 'm2'], nextPageToken: 'p2', resultSizeEstimate: 1234 });
 });
 
 test('searchGmailMessageIds includes pageToken when provided and returns null when there is no next page', async () => {
@@ -433,13 +433,13 @@ test('searchGmailMessageIds includes pageToken when provided and returns null wh
     return { ok: true, json: async () => ({ messages: [{ id: 'm3' }] }) };
   };
   const result = await searchGmailMessageIds({ accessToken: 'token', query: 'q', pageToken: 'p2', fetchImpl });
-  assert.deepEqual(result, { messageIds: ['m3'], nextPageToken: null });
+  assert.deepEqual(result, { messageIds: ['m3'], nextPageToken: null, resultSizeEstimate: null });
 });
 
 test('searchGmailMessageIds returns an empty list when Gmail finds no matches', async () => {
   const fetchImpl = async () => ({ ok: true, json: async () => ({}) });
   const result = await searchGmailMessageIds({ accessToken: 'token', query: 'q', fetchImpl });
-  assert.deepEqual(result, { messageIds: [], nextPageToken: null });
+  assert.deepEqual(result, { messageIds: [], nextPageToken: null, resultSizeEstimate: null });
 });
 
 test('searchGmailMessageIds throws on a failed request', async () => {

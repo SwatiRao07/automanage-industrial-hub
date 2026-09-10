@@ -26,7 +26,13 @@ export const subscribeToContactDiscoveryJob = (
       return;
     }
     const data = snap.data();
-    callback({ status: data.status, error: data.error });
+    callback({
+      status: data.status,
+      error: data.error,
+      processedCount: data.processedCount,
+      estimatedTotal: data.estimatedTotal ?? undefined,
+      contactCount: data.accumulated ? Object.keys(data.accumulated).length : undefined,
+    });
   });
 };
 

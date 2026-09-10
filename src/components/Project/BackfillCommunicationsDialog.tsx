@@ -14,7 +14,7 @@ import {
   getGmailContactDirectory,
 } from '@/utils/communicationsBackfillFirestore';
 import { getClientDomains, groupContactsForPicker } from '@/utils/communicationsBackfill';
-import type { DiscoveredContact } from '@/types/communicationsBackfill';
+import type { ContactDiscoveryJobState, DiscoveredContact } from '@/types/communicationsBackfill';
 
 interface BackfillCommunicationsDialogProps {
   open: boolean;
@@ -43,6 +43,7 @@ export function BackfillCommunicationsDialog({
   const [otherOpen, setOtherOpen] = useState(false);
   const [starting, setStarting] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | undefined>(undefined);
+  const [discoveryProgress, setDiscoveryProgress] = useState<ContactDiscoveryJobState | null>(null);
   const [retryToken, setRetryToken] = useState(0);
 
   const uid = user?.uid;
@@ -73,6 +74,7 @@ export function BackfillCommunicationsDialog({
     const runDiscovery = async () => {
       setPhase('discovering');
       setDiscoveryError(undefined);
+      setDiscoveryProgress(null);
       const { status } = await startContactDiscovery();
       if (cancelled) return;
       if (status === 'ready') {
@@ -89,9 +91,11 @@ export function BackfillCommunicationsDialog({
         }
         if (job.status === 'ready') {
           await loadDirectory();
+          return;
         }
         // status === 'scanning': stay on the 'discovering' phase, more
         // progress updates will follow.
+        setDiscoveryProgress(job);
       });
     };
 
@@ -164,7 +168,18 @@ export function BackfillCommunicationsDialog({
 
         {phase === 'discovering' && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
-            <Loader2 className="h-4 w-4 animate-spin" /> Scanning your mailbox for contacts (this can take a few minutes)...
+            <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+            <span>
+              {discoveryProgress?.processedCount != null ? (
+                <>
+                  Scanned {discoveryProgress.processedCount}
+                  {discoveryProgress.estimatedTotal ? ` of ~${discoveryProgress.estimatedTotal}` : ''} messages
+                  {discoveryProgress.contactCount ? ` — ${discoveryProgress.contactCount} contacts found so far` : ''}
+                </>
+              ) : (
+                'Scanning your mailbox for contacts (this can take a few minutes)...'
+              )}
+            </span>
           </div>
         )}
 

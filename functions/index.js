@@ -4424,16 +4424,22 @@ async function processOneContactDiscoveryJob({ db, uid, jobRef, job, clientId, c
   const query = `after:${formatGmailDate(job.sinceDate.toDate())}`;
   const accumulated = job.accumulated || {};
   let pageToken = job.pageToken || undefined;
+  let processedCount = job.processedCount || 0;
+  let estimatedTotal = job.estimatedTotal || null;
 
   // Bounded work per tick — the job resumes from pageToken on the next
   // scheduled run, so a large mailbox finishes over several ticks safely
   // within the function timeout.
   for (let page = 0; page < DISCOVERY_PAGES_PER_TICK; page += 1) {
-    const { messageIds, nextPageToken } = await searchGmailMessageIds({ accessToken, query, pageToken, fetchImpl: fetch });
+    const { messageIds, nextPageToken, resultSizeEstimate } = await searchGmailMessageIds({ accessToken, query, pageToken, fetchImpl: fetch });
+    if (estimatedTotal == null && resultSizeEstimate != null) {
+      estimatedTotal = resultSizeEstimate;
+    }
     for (const messageId of messageIds) {
       const headers = await getGmailMessageHeaders({ accessToken, messageId, fetchImpl: fetch });
       const participants = extractExternalParticipantsFromHeaders(headers);
       mergeParticipantsIntoAccumulator(accumulated, participants, new Date().toISOString());
+      processedCount += 1;
     }
     pageToken = nextPageToken;
     if (!pageToken) break;
@@ -4441,7 +4447,7 @@ async function processOneContactDiscoveryJob({ db, uid, jobRef, job, clientId, c
 
   if (pageToken) {
     await jobRef.set(
-      { accumulated, pageToken, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { accumulated, pageToken, processedCount, estimatedTotal, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
       { merge: true }
     );
     return;

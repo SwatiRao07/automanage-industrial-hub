@@ -17,6 +17,9 @@ export type ContactDiscoveryStatus = 'scanning' | 'ready' | 'failed';
 export interface ContactDiscoveryJobState {
   status: ContactDiscoveryStatus;
   error?: string;
+  processedCount?: number;
+  estimatedTotal?: number;
+  contactCount?: number;
 }
 
 export type EmailBackfillStatus = 'pending' | 'running' | 'completed' | 'failed';

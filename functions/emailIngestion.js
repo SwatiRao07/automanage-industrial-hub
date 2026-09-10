@@ -365,6 +365,7 @@ async function searchGmailMessageIds({ accessToken, query, pageToken, fetchImpl 
   return {
     messageIds: (payload.messages || []).map((m) => m.id),
     nextPageToken: payload.nextPageToken || null,
+    resultSizeEstimate: typeof payload.resultSizeEstimate === 'number' ? payload.resultSizeEstimate : null,
   };
 }
 
