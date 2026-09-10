@@ -4534,6 +4534,101 @@ exports.addProjectBackfillStakeholders = onCall(async (request) => {
   return { queuedContactCount: pendingContactEmails.length };
 });
 
+const BACKFILL_CONTACTS_PER_BATCH = 25;
+
+/** Advance every pending/running email backfill job by a bounded number of Gmail search results. */
+exports.processEmailBackfillJobs = onSchedule(
+  {
+    schedule: 'every 10 minutes',
+    secrets: [googleOAuthClientId, googleOAuthClientSecret, geminiApiKeySecret],
+    timeoutSeconds: 300,
+    memory: '512MiB',
+  },
+  async () => {
+    const db = admin.firestore();
+    const jobsSnap = await db.collection('emailBackfillJobs').where('status', 'in', ['pending', 'running']).get();
+    if (jobsSnap.empty) return;
+
+    const clientId = googleOAuthClientId.value();
+    const clientSecret = googleOAuthClientSecret.value();
+    const geminiApiKey = geminiApiKeySecret.value();
+
+    for (const jobDoc of jobsSnap.docs) {
+      const projectId = jobDoc.id;
+      try {
+        await processOneEmailBackfillJob({ db, projectId, jobRef: jobDoc.ref, job: jobDoc.data(), clientId, clientSecret, geminiApiKey });
+      } catch (error) {
+        logger.error('processEmailBackfillJobs: job failed', { projectId, error: error.message });
+        await jobDoc.ref.set({ status: 'failed', error: error.message }, { merge: true });
+      }
+    }
+  }
+);
+
+async function processOneEmailBackfillJob({ db, projectId, jobRef, job, clientId, clientSecret, geminiApiKey }) {
+  const completed = new Set(job.completedContacts || []);
+  const allContacts = job.contacts || [];
+  const remaining = allContacts.filter((email) => !completed.has(email));
+
+  if (remaining.length === 0) {
+    await jobRef.set({ status: 'completed', updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    await db.collection('projects').doc(projectId).set({ backfilledContactEmails: allContacts }, { merge: true });
+    return;
+  }
+
+  const connectionSnap = await db.collection('gmailConnections').doc(job.requestedByUid).get();
+  if (!connectionSnap.exists || connectionSnap.data().status !== 'connected') {
+    await jobRef.set({ status: 'failed', error: 'Gmail account is no longer connected' }, { merge: true });
+    return;
+  }
+  const { accessToken } = await refreshAccessToken({
+    refreshToken: connectionSnap.data().refreshToken, clientId, clientSecret, fetchImpl: fetch,
+  });
+
+  const batch = remaining.slice(0, BACKFILL_CONTACTS_PER_BATCH);
+  const query = buildBackfillSearchQuery(batch, job.sinceDate.toDate());
+  let pageToken = job.pageToken || undefined;
+  let processedCount = job.processedCount || 0;
+  let matchedCount = job.matchedCount || 0;
+
+  // One page (up to 50 messages, each involving a full Gemini sanitize call)
+  // per tick — the job resumes from pageToken on the next scheduled run.
+  const { messageIds, nextPageToken } = await searchGmailMessageIds({ accessToken, query, pageToken, fetchImpl: fetch });
+  for (const messageId of messageIds) {
+    const matched = await processGmailMessage({ db, accessToken, messageId, geminiApiKey });
+    processedCount += 1;
+    if (matched) matchedCount += 1;
+  }
+  pageToken = nextPageToken;
+
+  if (pageToken) {
+    await jobRef.set(
+      { status: 'running', pageToken, processedCount, matchedCount, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true }
+    );
+    return;
+  }
+
+  // This batch of contacts is fully searched — mark them done and clear the
+  // page cursor so the next tick starts the next batch from scratch.
+  const newCompleted = [...completed, ...batch];
+  const allDone = newCompleted.length >= allContacts.length;
+  await jobRef.set(
+    {
+      status: allDone ? 'completed' : 'running',
+      completedContacts: newCompleted,
+      pageToken: admin.firestore.FieldValue.delete(),
+      processedCount,
+      matchedCount,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  if (allDone) {
+    await db.collection('projects').doc(projectId).set({ backfilledContactEmails: allContacts }, { merge: true });
+  }
+}
+
 /**
  * Poll every connected Gmail account for new messages every 10 minutes.
  * Applies the capture-scope guard, matches external participants against
