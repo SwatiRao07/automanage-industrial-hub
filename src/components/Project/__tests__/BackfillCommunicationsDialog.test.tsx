@@ -211,10 +211,10 @@ describe('BackfillCommunicationsDialog discovery dead-end states', () => {
 });
 
 describe('BackfillCommunicationsDialog discovery progress', () => {
-  it('shows scanned/estimated message counts and contacts found while still scanning', async () => {
+  it('shows a "~" prefixed total while the count-only pass is still running', async () => {
     vi.mocked(startContactDiscovery).mockResolvedValue({ status: 'scanning' });
     vi.mocked(subscribeToContactDiscoveryJob).mockImplementation((_uid, cb) => {
-      cb({ status: 'scanning', processedCount: 150, estimatedTotal: 2000, contactCount: 42 });
+      cb({ status: 'scanning', processedCount: 150, totalMessageCount: 2000, countComplete: false, contactCount: 42 });
       return () => {};
     });
 
@@ -233,10 +233,33 @@ describe('BackfillCommunicationsDialog discovery progress', () => {
     expect(screen.getByText(/42 contacts found so far/i)).toBeInTheDocument();
   });
 
-  it('drops the stale estimate once processedCount has exceeded it, instead of showing a nonsensical count', async () => {
+  it('drops the "~" once the count-only pass completes, showing an exact total', async () => {
     vi.mocked(startContactDiscovery).mockResolvedValue({ status: 'scanning' });
     vi.mocked(subscribeToContactDiscoveryJob).mockImplementation((_uid, cb) => {
-      cb({ status: 'scanning', processedCount: 300, estimatedTotal: 201, contactCount: 533 });
+      cb({ status: 'scanning', processedCount: 300, totalMessageCount: 11412, countComplete: true, contactCount: 533 });
+      return () => {};
+    });
+
+    render(
+      <BackfillCommunicationsDialog
+        open
+        onOpenChange={() => {}}
+        projectId="p1"
+        clientId="c1"
+        alreadyBackfilledEmails={[]}
+        onConfirm={() => {}}
+      />
+    );
+
+    await waitFor(() => expect(screen.getByText(/scanned 300 of 11412 messages/i)).toBeInTheDocument());
+    expect(screen.queryByText(/of ~11412/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/533 contacts found so far/i)).toBeInTheDocument();
+  });
+
+  it('hides the total entirely once processedCount has caught up to it (a live inbox growing the total)', async () => {
+    vi.mocked(startContactDiscovery).mockResolvedValue({ status: 'scanning' });
+    vi.mocked(subscribeToContactDiscoveryJob).mockImplementation((_uid, cb) => {
+      cb({ status: 'scanning', processedCount: 300, totalMessageCount: 201, countComplete: true, contactCount: 533 });
       return () => {};
     });
 
@@ -252,7 +275,7 @@ describe('BackfillCommunicationsDialog discovery progress', () => {
     );
 
     await waitFor(() => expect(screen.getByText(/scanned 300 messages/i)).toBeInTheDocument());
-    expect(screen.queryByText(/of ~201/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/of 201/i)).not.toBeInTheDocument();
     expect(screen.getByText(/533 contacts found so far/i)).toBeInTheDocument();
   });
 });

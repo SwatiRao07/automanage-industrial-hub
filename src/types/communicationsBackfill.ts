@@ -18,7 +18,8 @@ export interface ContactDiscoveryJobState {
   status: ContactDiscoveryStatus;
   error?: string;
   processedCount?: number;
-  estimatedTotal?: number;
+  totalMessageCount?: number;
+  countComplete?: boolean;
   contactCount?: number;
 }
 

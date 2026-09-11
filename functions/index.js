@@ -4339,6 +4339,11 @@ exports.getGmailConnectionStatus = onCall(async (request) => {
 const CONTACT_DIRECTORY_STALE_MS = 30 * 24 * 60 * 60 * 1000;
 const BACKFILL_LOOKBACK_MS = 365 * 24 * 60 * 60 * 1000;
 const DISCOVERY_PAGES_PER_TICK = 2;
+// Counting-only pages (id-only messages.list, no per-message header fetch)
+// are far cheaper than the content-scanning pages above, so many more of
+// them fit in one tick — this is what makes the progress total accurate
+// instead of relying on Gmail's unreliable resultSizeEstimate.
+const DISCOVERY_COUNT_PAGES_PER_TICK = 100;
 
 /**
  * Kick off (or resume) a one-time scan of the caller's own connected Gmail
@@ -4425,16 +4430,12 @@ async function processOneContactDiscoveryJob({ db, uid, jobRef, job, clientId, c
   const accumulated = job.accumulated || {};
   let pageToken = job.pageToken || undefined;
   let processedCount = job.processedCount || 0;
-  let estimatedTotal = job.estimatedTotal || null;
 
   // Bounded work per tick — the job resumes from pageToken on the next
   // scheduled run, so a large mailbox finishes over several ticks safely
   // within the function timeout.
   for (let page = 0; page < DISCOVERY_PAGES_PER_TICK; page += 1) {
-    const { messageIds, nextPageToken, resultSizeEstimate } = await searchGmailMessageIds({ accessToken, query, pageToken, fetchImpl: fetch });
-    if (estimatedTotal == null && resultSizeEstimate != null) {
-      estimatedTotal = resultSizeEstimate;
-    }
+    const { messageIds, nextPageToken } = await searchGmailMessageIds({ accessToken, query, pageToken, fetchImpl: fetch });
     for (const messageId of messageIds) {
       const headers = await getGmailMessageHeaders({ accessToken, messageId, fetchImpl: fetch });
       const participants = extractExternalParticipantsFromHeaders(headers);
@@ -4445,9 +4446,35 @@ async function processOneContactDiscoveryJob({ db, uid, jobRef, job, clientId, c
     if (!pageToken) break;
   }
 
+  // Separate, much cheaper id-only pass (no per-message header fetch) that
+  // counts the total messages matching the same query, so the progress UI
+  // can show an accurate denominator instead of Gmail's unreliable
+  // resultSizeEstimate. Runs alongside the content-scanning pass above,
+  // advancing its own independent cursor; a live inbox can still grow this
+  // total slightly after "complete" if new mail arrives mid-scan, which is
+  // expected and harmless.
+  let totalMessageCount = job.totalMessageCount || 0;
+  let countPageToken = job.countPageToken || undefined;
+  let countComplete = job.countComplete || false;
+  if (!countComplete) {
+    for (let page = 0; page < DISCOVERY_COUNT_PAGES_PER_TICK; page += 1) {
+      const { messageIds, nextPageToken } = await searchGmailMessageIds({ accessToken, query, pageToken: countPageToken, fetchImpl: fetch });
+      totalMessageCount += messageIds.length;
+      countPageToken = nextPageToken;
+      if (!countPageToken) {
+        countComplete = true;
+        break;
+      }
+    }
+  }
+
   if (pageToken) {
     await jobRef.set(
-      { accumulated, pageToken, processedCount, estimatedTotal, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+      {
+        accumulated, pageToken, processedCount,
+        totalMessageCount, countPageToken: countComplete ? admin.firestore.FieldValue.delete() : countPageToken, countComplete,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
       { merge: true }
     );
     return;

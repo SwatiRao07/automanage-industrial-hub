@@ -30,7 +30,8 @@ export const subscribeToContactDiscoveryJob = (
       status: data.status,
       error: data.error,
       processedCount: data.processedCount,
-      estimatedTotal: data.estimatedTotal ?? undefined,
+      totalMessageCount: data.totalMessageCount ?? undefined,
+      countComplete: data.countComplete ?? undefined,
       contactCount: data.accumulated ? Object.keys(data.accumulated).length : undefined,
     });
   });
